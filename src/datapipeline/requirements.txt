@@ -1,0 +1,11 @@
+requests
+beautifulsoup4
+pdfplumber
+tqdm
+urllib3
+chardet
+typing_extensions
+charset-normalizer
+soupsieve
+pdfminer.six
+cryptography

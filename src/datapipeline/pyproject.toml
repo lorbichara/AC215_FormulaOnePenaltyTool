@@ -1,15 +1,19 @@
 [project]
-name = "Data Pipeline"
+name = "datapipeline"
 version = "0.1.0"
-description = "Data pipeline container"
+description = "A data pipeline for processing F1 race control documents"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "chromadb>=1.1.0",
-    "google-genai>=1.39.1",
-    "langchain>=0.3.27",
-    "langchain-community>=0.3.30",
-    "openai>=1.95.1",
-    "openai-agents>=0.3.2",
-    "pandas>=2.3.3",
+    "requests",
+    "beautifulsoup4",
+    "pdfplumber",
+    "tqdm",
+    "urllib3",
+    "chardet",
+    "typing_extensions",
+    "charset-normalizer",
+    "soupsieve",
+    "pdfminer.six",
+    "cryptography",
 ]
