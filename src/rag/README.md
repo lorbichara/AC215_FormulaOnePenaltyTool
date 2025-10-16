@@ -45,19 +45,19 @@ All commands should be run from the `src/rag` directory.
 
 ## Evidence of Running Instances
 - **Running the container**
-![alt text](./READMEscreenshots/image.png)
+![alt text](./READMEScreenshots/image.png)
 
 - **Parsing and chunking documents**
-![alt text](./READMEscreenshots/image-1.png)
+![alt text](./READMEScreenshots/image-1.png)
 
 - **Create embeddings for the chunks**
-![alt text](./READMEscreenshots/image-2.png)
+![alt text](./READMEScreenshots/image-2.png)
 
 - **Store the embeddings in ChromaDB**
-![alt text](./READMEscreenshots/image-3.png)
+![alt text](./READMEScreenshots/image-3.png)
 
 - **Query ChromaDB**
-![alt text](./READMEscreenshots/image-4.png)
+![alt text](./READMEScreenshots/image-4.png)
 
 ## Design Decisions
 #### Chunking
