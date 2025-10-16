@@ -49,5 +49,6 @@ RUN uv sync
 COPY --chown=app:app . ./
 
 # Entry point
-ENTRYPOINT ["/bin/bash","docker-entrypoint.sh"]
+COPY --chown=app:app docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+ENTRYPOINT ["/bin/bash", "/usr/local/bin/docker-entrypoint.sh"]
 
