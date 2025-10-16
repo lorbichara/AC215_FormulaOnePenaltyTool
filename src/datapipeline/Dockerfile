@@ -17,6 +17,10 @@ ENV PYTHONUNBUFFERED=1
 ENV UV_LINK_MODE=copy
 ENV UV_PROJECT_ENVIRONMENT=/.venv
 
+# Activate the virtual environment
+ENV VIRTUAL_ENV=/.venv
+ENV PATH="/.venv/bin:$PATH"
+
 # Ensure we have an up to date baseline, install dependencies and
 # create a user so we don't run the app as root
 RUN set -ex; \
@@ -42,10 +46,10 @@ WORKDIR /app
 COPY --chown=app:app pyproject.toml uv.lock* ./
 
 # Install dependencies in a separate layer for better caching
-RUN uv sync --frozen
+RUN uv sync
 
 # Copy the rest of the source code
 COPY --chown=app:app . ./
 
 # Entry point
-ENTRYPOINT ["/bin/bash","docker-entrypoint.sh"]
+ENTRYPOINT ["/bin/bash"]
