@@ -237,7 +237,8 @@ def query():
 
     model = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL)
     
-    query = "Is the Car 30 infringement in 2024 Abu Dhabhi Grand Prix, a fair penalty?"
+    # query = "Is the Car 30 infringement in 2024 Abu Dhabi Grand Prix a fair penalty?"
+    query = input("Enter your F1 penalty-related query: ")
     print("Query:", query)
     embeddings = model.get_embeddings([query],
                                       output_dimensionality=EMBEDDING_DIMENSION)

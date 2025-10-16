@@ -7,8 +7,9 @@ services:
         image: ac215-rag-cli
         container_name: ac215-rag-cli
         volumes:
-            - ../secrets:/secrets
-            - ../AC215_FormulaOnePenaltyTool:/app
+            - ../../secrets:/secrets
+            - .:/app
+            - ../../dataset:/app/dataset
         environment:
             GOOGLE_APPLICATION_CREDENTIALS: $GOOGLE_APPLICATION_CREDENTIALS
             GCP_PROJECT: $GCP_PROJECT
