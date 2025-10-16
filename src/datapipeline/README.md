@@ -38,6 +38,13 @@ data/
 
 **Note**: pdf files under `Regulations` contains the lastest version of the [FIA Formula One Regulations](https://www.fia.com/regulation/category/110) among all categories. These files are obtained manually directly from the website due to the small amount. Future iterations of implementation plan may automate this process.
 
+## Data Statistics
+
+As of October 2025, the collected dataset contains the following:
+
+-   **Seasons**: 8 (2015, 2019-2025)
+-   **Total PDF Documents**: 8708（5 Regulation rule books + 8703 race control documents）
+
 ## Local Setup
 
 This project uses `uv` for Python environment and package management.
@@ -56,7 +63,7 @@ This project uses `uv` for Python environment and package management.
 
 3.  **Install dependencies:**
     ```bash
-    uv pip sync -r requirements.txt
+    uv pip sync requirements.txt
     ```
 
 ## Running the Pipeline Locally
