@@ -14,6 +14,8 @@ This project aims to make Formula 1 penalties more transparent and understandabl
 ## Milestone 2
 In this milestone, we have set up the core infrastrucutre of the project. This include setting up the environment, as well as a data collection pipeline and a RAG setup.
 
+See Milestone 1 [here](Milestone1.pdf).
+
 ### Data
 See [Data Pipeline README](src/datapipeline/README.md) for more details on the data pipeline.
 

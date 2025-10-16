@@ -28,7 +28,6 @@ from vertexai.generative_models import GenerativeModel, Part
 
 # GCP related parameters
 GCP_PROJECT     = os.environ["GCP_PROJECT"]
-#GCP_PROJECT      = "ac215-bhargav"
 GCP_LOCATION     = "us-central1"
 
 # LLM related parameters
