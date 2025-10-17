@@ -2,3 +2,6 @@
 
 # all data files
 src/datapipeline/data/
+
+# all pycache files
+**/__pycache__/

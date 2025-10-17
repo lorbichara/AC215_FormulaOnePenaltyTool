@@ -16,4 +16,5 @@ dependencies = [
     "soupsieve",
     "pdfminer.six",
     "cryptography",
+    "google-cloud-storage",
 ]
