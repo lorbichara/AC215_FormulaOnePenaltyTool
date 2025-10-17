@@ -276,17 +276,20 @@ def query():
         return f"An error occurred: {e}"
         
 def main(args=None):
-    if args.chunk:
+    if args.all:
         chunk()
-    
-    if args.embed:
         embed()
-
-    if args.store:
         store()
-
-    if args.query:
         query()
+    else:
+        if args.chunk:
+            chunk()
+        if args.embed:
+            embed()
+        if args.store:
+            store()
+        if args.query:
+            query()
         
 if __name__ == "__main__":
     # Generate the inputs arguments parser
@@ -312,6 +315,11 @@ if __name__ == "__main__":
         "--query",
         action="store_true",
         help="Query vector db and chat with LLM",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Run all steps sequentially",
     )
 
     args = parser.parse_args()
