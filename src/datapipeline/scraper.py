@@ -6,19 +6,22 @@ from bs4 import BeautifulSoup
 from tqdm import tqdm
 from urllib.parse import urljoin, quote, urlsplit, urlunsplit, unquote
 import time
+from google.cloud import storage
 
 class FIA_Scraper:
     """
     A class to scrape F1 race control PDF documents from the official FIA website.
     """
 
-    def __init__(self, base_url: str, output_dir: str):
+    def __init__(self, base_url: str, output_dir: str, upload_to_gcs: bool = False, bucket_name: str = None):
         """
         Initializes the FIA_Scraper.
 
         Args:
             base_url: The base URL of the FIA documents page.
             output_dir: The local directory to save the PDFs.
+            upload_to_gcs: If True, upload files to GCS instead of downloading locally.
+            bucket_name: The GCS bucket name to upload files to.
         """
         self.base_url = base_url
         self.output_dir = output_dir
@@ -30,6 +33,13 @@ class FIA_Scraper:
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
         ]
+        self.upload_to_gcs = upload_to_gcs
+        self.bucket_name = bucket_name
+        self.gcs_client = None
+        if self.upload_to_gcs:
+            self.gcs_client = storage.Client()
+            self.bucket = self.gcs_client.bucket(self.bucket_name)
+
         os.makedirs(self.output_dir, exist_ok=True)
 
     def _get_random_headers(self):
@@ -45,9 +55,16 @@ class FIA_Scraper:
         path = quote(parts.path)
         return urlunsplit((parts.scheme, parts.netloc, path, parts.query, parts.fragment))
 
+    def _upload_to_gcs(self, content, destination_blob_name):
+        """Uploads a file to the bucket."""
+        blob = self.bucket.blob(destination_blob_name)
+        blob.upload_from_string(content)
+        print(f"File uploaded to {destination_blob_name}.")
+
     def scrape_all_documents(self, limit: int = None):
         """
         Scrapes the FIA website for all F1 race control documents from all seasons and events.
+        If GCS upload is enabled, files are uploaded to the specified bucket instead of being saved locally.
 
         Args:
             limit: The maximum number of documents to download.
@@ -90,22 +107,31 @@ class FIA_Scraper:
                         if limit is not None and downloaded_count >= limit:
                             break
                         
-                        event_dir = os.path.join(self.output_dir, season_name, event_name)
-                        os.makedirs(event_dir, exist_ok=True)
-                        
                         filename = unquote(pdf_url.split("/")[-1])
-                        filepath = os.path.join(event_dir, filename)
                         
-                        if os.path.exists(filepath):
-                            print(f"Skipping existing file: {filename}")
-                            continue
-                        try:
-                            response = self.session.get(pdf_url, headers=self._get_random_headers())
-                            with open(filepath, "wb") as f:
-                                f.write(response.content)
-                            downloaded_count += 1
-                        except requests.exceptions.RequestException as e:
-                            print(f"Could not download {pdf_url}: {e}")
+                        if self.upload_to_gcs:
+                            destination_blob_name = f"raw_pdfs/{season_name}/{event_name}/{filename}"
+                            try:
+                                response = self.session.get(pdf_url, headers=self._get_random_headers())
+                                self._upload_to_gcs(response.content, destination_blob_name)
+                                downloaded_count += 1
+                            except requests.exceptions.RequestException as e:
+                                print(f"Could not download {pdf_url}: {e}")
+                        else:
+                            event_dir = os.path.join(self.output_dir, season_name, event_name)
+                            os.makedirs(event_dir, exist_ok=True)
+                            filepath = os.path.join(event_dir, filename)
+                            
+                            if os.path.exists(filepath):
+                                print(f"Skipping existing file: {filename}")
+                                continue
+                            try:
+                                response = self.session.get(pdf_url, headers=self._get_random_headers())
+                                with open(filepath, "wb") as f:
+                                    f.write(response.content)
+                                downloaded_count += 1
+                            except requests.exceptions.RequestException as e:
+                                print(f"Could not download {pdf_url}: {e}")
 
                 except requests.exceptions.RequestException as e:
                     print(f"Could not process {event_url}: {e}")
