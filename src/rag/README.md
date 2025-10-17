@@ -23,6 +23,11 @@ All commands should be run from the `src/rag` directory.
     sh docker-shell.sh
     ```
 
+-   **Run the entire RAG pipeline:**
+    ```bash
+    python ac215_rag.py --all
+    ```
+
 -   **Parse and chunk the documents:**
     ```bash
     python ac215_rag.py --chunk
