@@ -2,6 +2,9 @@
 
 # all data files
 src/datapipeline/data/
+dataset/
+outputs/
+secrets/
 
 # all pycache files
 **/__pycache__/
