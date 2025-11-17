@@ -32,6 +32,24 @@ GCP_PROJECT  = os.environ["GCP_PROJECT"]
 GCP_BUCKET   = os.environ["GCP_BUCKET"]
 GCP_LOCATION = "us-central1"
 
+# Data related parameters
+DATASET_DIR            = "dataset"
+DECISIONS_DATA_DIR     = "dataset/decisions"
+REGULATIONS_DATA_DIR   = "dataset/regulations"
+
+JSON_OUTPUT_DIR        = "output"
+DECISION_JSON_DIR   = "output/decision_jsons"
+REGULATION_JSON_DIR = "output/regulation_jsons"
+
+# ChromaDB related parameters
+CHROMADB_HOST    = "ac215-rag-chromadb"
+#CHROMADB_HOST    = "localhost"
+CHROMADB_PORT    = 8000
+CHUNK_SIZE       = 350
+
+DECISIONS_COLLECTION_NAME  = "ac215-f1-decisions_collection"
+REGULATIONS_COLLECTION_NAME  = "ac215-f1-regulations_collection"
+
 # LLM related parameters
 EMBEDDING_MODEL     = "text-embedding-004"
 EMBEDDING_DIMENSION = 256
@@ -39,41 +57,101 @@ EMBEDDING_DIMENSION = 256
 LLM_MODEL_NAME = "gemini-2.5-flash"
 #LLM_MODEL_NAME = "gemini-2.5-pro"
 
-# Data related parameters
-INPUT_DIR              = "dataset"
-DECISIONS_DATA_DIR     = "dataset/decisions"
-REGULATIONS_DATA_DIR   = "dataset/regulations"
-DECISION_JSON_FOLDER   = "output_decisions"
-REGULATION_JSON_FOLDER = "output_regulations"
 
-# ChromaDB related parameters
-CHROMADB_HOST    = "ac215-rag-chromadb"
-#CHROMADB_HOST    = "localhost"
-CHROMADB_PORT    = 8000
-CHUNK_SIZE       = 350
-COLLECTION_NAME  = "ac215-f1-collection"
+# ==============================================================================
+#                                SYNC DATASET FROM CLOUD
+# ==============================================================================
+def is_file_interesting(file_name):
+    substrings = ["Decision", "Summons", "Offence", "Infringement"]
+    for substr in substrings:
+        if substr in file_name:
+            return True
+    return False
 
+def sync_cloud():
+    print("SYNCING FILES FROM GCP BUCKET: " + GCP_BUCKET)
+
+    # Initialize a client
+    storage_client = storage.Client()
+
+    # Ensure the destination directory exists
+    if not os.path.exists(DATASET_DIR):
+        os.makedirs(DATASET_DIR)
+
+    total_input_files = 0
+    files_downloaded = 0
+
+    try:
+        # Get the bucket object
+        bucket = storage_client.bucket(GCP_BUCKET)
+
+        # List all blobs (files and folder objects)
+        blobs = bucket.list_blobs()
+
+        for blob in blobs:
+            # GCS doesn't have true folders; they are objects ending in '/'.
+            # prefixes are considered as folders and non-prefixes are considered as files.
+
+            if not blob.name.endswith('/'):
+                # This is a file object
+                # print(f"  **[FILE]**: gs://{GCP_BUCKET}/{blob.name}")
+                if "raw_pdfs" not in blob.name:
+                    continue
+
+                if "SEASON" in blob.name:
+                    DEST_DIR = DECISIONS_DATA_DIR
+                else:
+                    DEST_DIR = REGULATIONS_DATA_DIR
+
+                file_name = os.path.basename(blob.name)
+                #file_path = os.path.join(DEST_DIR, blob.name)
+                file_path = os.path.join(DEST_DIR, file_name)
+
+                # Skip the files that are not of interest.
+                if not is_file_interesting(file_path):
+                    # print(f"    -> Skipped: {file_path}")
+                    continue
+
+                # Download the file
+                if not os.path.isfile(file_path):
+                    blob.download_to_filename(file_path)
+                    print(f"    -> Downloaded to: {file_path}")
+                    files_downloaded += 1
+                else:
+                    print(f"    -> Already exists: {file_path}")
+                    total_input_files += 1
+    except Exception as e:
+        print(f"\n An error occurred: {e}")
+
+    print("No of files downloaded now: " + str(files_downloaded))
+    print("No of files to process    : " + str(total_input_files))
 
 # ==============================================================================
 #                                CHUNK THE DATA
 # ==============================================================================
 def chunk(input_dir, json_folder):
-
     # Make dataset folders
+    os.makedirs(JSON_OUTPUT_DIR, exist_ok=True)
     os.makedirs(json_folder, exist_ok=True)
-     
+
     # Read PDF files.
     pdf_files = [f for f in os.listdir(input_dir) if f.endswith('.pdf')]
     assert len(pdf_files), "No PDF files found in '{input_dir}'. Aborting."
     print("Number of files to process:", len(pdf_files))
 
+    counter = 0
     # Process PDF files
     for pdf_file in pdf_files:
+        # JUST FOR TESTING
+        if counter >= 1:
+            break
+        counter += 1
+
         filename = os.path.splitext(pdf_file)[0]
         filepath = os.path.join(input_dir, pdf_file)
         print("Processing file:", filepath)
         print("filename:", filename)
-        
+
         input_text = ""
         try:
             pdf_reader = PdfReader(filepath)
@@ -83,28 +161,28 @@ def chunk(input_dir, json_folder):
                     input_text += page_text.replace('\n', ' ') + " "
         except Exception as e:
             print(f"Error processing {filepath}: {e}")
-        
+
         text_chunks = None
         chunk_size  = CHUNK_SIZE
-        
+
         # Init the splitter
-        #text_splitter = SemanticChunker(embeddings)
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size)
 
         # Perform the splitting
         text_chunks = text_splitter.create_documents([input_text])
         text_chunks = [doc.page_content for doc in text_chunks]
-        print("Number of chunks:", len(text_chunks))
+        # print("Number of chunks:", len(text_chunks))
         assert len(text_chunks)
-        
+
         # Save the chunks
         data_df = pd.DataFrame(text_chunks, columns=["chunk"])
         data_df["file"] = filename
-        
+
         jsonl_filename = os.path.join(json_folder,
                                       f"chunks-{filename}.jsonl")
         with open(jsonl_filename, "w") as json_file:
             json_file.write(data_df.to_json(orient='records', lines=True))
+
 
 
 # ==============================================================================
@@ -115,7 +193,7 @@ def generate_text_embeddings(chunks,
     all_embeddings = []
 
     model = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL)
-    
+
     for i in range(0, len(chunks), batch_size):
         batch = chunks[i:i+batch_size]
         try:
@@ -125,19 +203,19 @@ def generate_text_embeddings(chunks,
         except errors.APIError as e:
             print(f"Failed to generate embeddings. Last error: {str(e)}")
             raise
-            
-    assert len(all_embeddings)    
+
+    assert len(all_embeddings)
     return all_embeddings
 
 def embed(json_folder):
-    
+
     # Get the list of chunk files
     jsonl_files = glob.glob(os.path.join(json_folder,
                                          f"chunks-*.jsonl"))
-    print("Number of files to process:", len(jsonl_files))
+    # print("Number of files to process:", len(jsonl_files))
 
     for jsonl_file in jsonl_files:
-        print("Processing file:", jsonl_file)
+        # print("Processing file:", jsonl_file)
 
         data_df = pd.read_json(jsonl_file, lines=True)
 
@@ -145,7 +223,7 @@ def embed(json_folder):
         chunks = chunks.tolist()
         data_df["embedding"] = generate_text_embeddings(chunks,
                                                         batch_size=100)
-        
+
         # Is it necessary to sleep here?
         time.sleep(2)
 
@@ -179,32 +257,32 @@ def store_text_embeddings(df, collection, batch_size=500):
                        documents=documents,
                        embeddings=embeddings)
         total_inserted += len(batch)
-        print(f"Inserted {total_inserted} items...")
+        #print(f"Inserted {total_inserted} items...")
 
     print(f"Finished inserting {total_inserted} items into collection '{collection.name}'")
 
-def store(json_folder):
+def store(json_folder, target_collection):
 
     # Clear Cache
     chromadb.api.client.SharedSystemClient.clear_system_cache()
 
     from chromadb.config import DEFAULT_TENANT, DEFAULT_DATABASE, Settings
-    
+
     # Connect to chroma DB
     client = chromadb.HttpClient(host=CHROMADB_HOST, port=CHROMADB_PORT)
 
     # Clear out any existing items in the collection
     try:
         # Clear out any existing items in the collection
-        client.delete_collection(name=COLLECTION_NAME)
-        print(f"Deleted existing collection '{COLLECTION_NAME}'")
+        client.delete_collection(name=target_collection)
+        print(f"Deleted existing collection '{target_collection}'")
     except Exception:
-        print(f"Collection '{COLLECTION_NAME}' did not exist. Creating new.")
+        print(f"Collection '{target_collection}' did not exist. Creating new.")
 
     # Create a brand new collection.
-    collection = client.create_collection(name=COLLECTION_NAME,
+    collection = client.create_collection(name=target_collection,
                                           metadata={"hnsw:space": "cosine"})
-    print(f"Created new empty collection '{COLLECTION_NAME}'")
+    print(f"Created new empty collection '{target_collection}'")
     print("Collection:", collection)
 
     # Get the list of embedding files
@@ -213,10 +291,10 @@ def store(json_folder):
 
     # Process
     for jsonl_file in jsonl_files:
-        print("Processing file:", jsonl_file)
+        # print("Processing file:", jsonl_file)
 
         data_df = pd.read_json(jsonl_file, lines=True)
-        
+
         # Store data
         store_text_embeddings(data_df, collection)
 
@@ -227,16 +305,22 @@ def query():
 
     # Connect to chroma DB
     client = chromadb.HttpClient(host=CHROMADB_HOST, port=CHROMADB_PORT)
-    
+
     # Get the collection
     try:
-        collection = client.get_collection(name=COLLECTION_NAME)
+        decision_collection = client.get_collection(name=DECISIONS_COLLECTION_NAME)
     except Exception:
-        print(f"Collection '{COLLECTION_NAME}' does not exist.")
+        print(f"Collection '{DECISIONS_COLLECTION_NAME}' does not exist.")
+        raise
+
+    try:
+        regulation_collection = client.get_collection(name=REGULATIONS_COLLECTION_NAME)
+    except Exception:
+        print(f"Collection '{REGULATIONS_COLLECTION_NAME}' does not exist.")
         raise
 
     model = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL)
-    
+
     # query = "Is the Car 30 infringement in 2024 Abu Dhabi Grand Prix a fair penalty?"
     query = input("Enter your F1 penalty-related query: ")
     print("Query:", query)
@@ -246,10 +330,14 @@ def query():
     #print("Query embeddings:", query_embedding)
 
     # 4: Query based on embedding value + lexical search filter
-    results = collection.query(query_embeddings=[query_embedding], n_results=10,)    
+    results_decision   = decision_collection.query(query_embeddings=[query_embedding],
+                                                   n_results=10,)
+    results_regulation = regulation_collection.query(query_embeddings=[query_embedding],
+                                                     n_results=10,)
+
     #results = collection.query(query_texts=[query], n_results=10)
-    
-    context_str = "\n---\n".join(results['documents'][0])
+
+    context_str = "\n---\n".join(results_decision['documents'][0])
     print("\n Retrieved Context:")
     print(context_str)
 
@@ -266,7 +354,7 @@ def query():
 
     #print("prompt template")
     #print(prompt_template)
-    
+
     llm_model = GenerativeModel(LLM_MODEL_NAME)
     print("\n Sending prompt to the LLM...")
     try:
@@ -276,93 +364,36 @@ def query():
     except Exception as e:
         print(f"An error occurred: {e}")
 
-def is_file_interesting(file_name):
-    substrings = ["Decision", "Summons", "Offence", "Infringement"]
-    for substr in substrings:
-        if substr in file_name:
-            return True
-    return False
-
-def sync_cloud():
-    print("SYNCING FILES FROM GCP BUCKET: " + GCP_BUCKET)
-    
-    # Initialize a client
-    storage_client = storage.Client()
-
-    # Ensure the destination directory exists
-    if not os.path.exists(INPUT_DIR):
-        os.makedirs(INPUT_DIR)
-        os.makedirs(DECISIONS_DATA_DIR)
-        os.makedirs(REGULATIONS_DATA_DIR)
-
-    total_input_files = 0
-    files_downloaded = 0
-
-    try:
-        # Get the bucket object
-        bucket = storage_client.bucket(GCP_BUCKET)
-        
-        # List all blobs (files and folder objects)
-        blobs = bucket.list_blobs()
-        
-        for blob in blobs:
-            # GCS doesn't have true folders; they are objects ending in '/'.
-            # prefixes are considered as folders and non-prefixes are considered as files.
-             
-            if not blob.name.endswith('/'):
-                # This is a file object
-                # print(f"  **[FILE]**: gs://{GCP_BUCKET}/{blob.name}")
-                if "raw_pdfs" not in blob.name:
-                    continue
-                
-                if "SEASON" in blob.name:
-                    DEST_DIR = DECISIONS_DATA_DIR
-                else:
-                    DEST_DIR = REGULATIONS_DATA_DIR
-                
-                file_name = os.path.basename(blob.name)
-                #file_path = os.path.join(DEST_DIR, blob.name)
-                file_path = os.path.join(DEST_DIR, file_name)
-
-                # Skip the files that are not of interest.
-                if not is_file_interesting(file_path):
-                    # print(f"    -> Skipped: {file_path}")
-                    continue
-                
-                # Download the file
-                if not os.path.isfile(file_path):
-                    blob.download_to_filename(file_path)
-                    print(f"    -> Downloaded to: {file_path}")
-                    files_downloaded += 1
-                else:
-                    print(f"    -> Already exists: {file_path}")
-                    total_input_files += 1
-    except Exception as e:
-        print(f"\n An error occurred: {e}")
-
-    print("No of files downloaded now: " + str(files_downloaded))
-    print("No of files to process    : " + str(total_input_files))
-
 def main(args=None):
 
     if args.all:
         sync_cloud()
-        chunk()
-        embed()
-        store()
+
+        chunk(DECISIONS_DATA_DIR, DECISION_JSON_DIR)
+        chunk(REGULATIONS_DATA_DIR, REGULATION_JSON_DIR)
+
+        embed(DECISION_JSON_DIR)
+        embed(REGULATION_JSON_DIR)
+
+        store(DECISION_JSON_DIR, DECISIONS_COLLECTION_NAME)
+        store(REGULATION_JSON_DIR, REGULATIONS_COLLECTION_NAME)
+
         query()
     else:
         if args.sync:
             sync_cloud()
         if args.chunk:
-            chunk()
+            chunk(DECISIONS_DATA_DIR, DECISION_JSON_DIR)
+            chunk(REGULATIONS_DATA_DIR, REGULATION_JSON_DIR)
         if args.embed:
-            embed()
+            embed(DECISION_JSON_DIR)
+            embed(REGULATION_JSON_DIR)
         if args.store:
-            store()
+            store(DECISION_JSON_DIR, DECISIONS_COLLECTION_NAME)
+            store(REGULATION_JSON_DIR, REGULATIONS_COLLECTION_NAME)
         if args.query:
             query()
-        
+
 if __name__ == "__main__":
     # Generate the inputs arguments parser
     # if you type into the terminal '--help', it will provide the description

@@ -10,6 +10,7 @@ services:
             - ../../secrets:/secrets
             - .:/app
             - ../../../Dataset:/app/dataset
+            - ../../../Output:/app/output
         environment:
             GOOGLE_APPLICATION_CREDENTIALS: $GOOGLE_APPLICATION_CREDENTIALS
             GCP_PROJECT: $GCP_PROJECT
