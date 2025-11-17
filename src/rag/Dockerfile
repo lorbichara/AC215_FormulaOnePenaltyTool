@@ -44,6 +44,7 @@ COPY --chown=app:app pyproject.toml uv.lock* ./
 # Install dependencies in a separate layer for better caching
 # RUN uv sync --frozen
 RUN uv sync
+#RUN uv pip sync requirements.txt
 
 # Copy the rest of the source code
 COPY --chown=app:app . ./
@@ -51,4 +52,3 @@ COPY --chown=app:app . ./
 # Entry point
 COPY --chown=app:app docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 ENTRYPOINT ["/bin/bash", "/usr/local/bin/docker-entrypoint.sh"]
-

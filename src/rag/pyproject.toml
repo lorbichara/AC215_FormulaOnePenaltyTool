@@ -1,7 +1,7 @@
 [project]
 name = "app"
 version = "0.1.0"
-description = "Add your description here"
+description = "AC215 project"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -15,4 +15,16 @@ dependencies = [
     "pypdf",
     "tqdm",
     "vertexai",
+    "requests",
+    "beautifulsoup4",
+    "pdfplumber",
+    "tqdm",
+    "urllib3",
+    "chardet",
+    "typing_extensions",
+    "charset-normalizer",
+    "soupsieve",
+    "pdfminer.six",
+    "cryptography",
+    "google-cloud-storage",
 ]
