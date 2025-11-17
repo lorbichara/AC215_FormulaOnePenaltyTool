@@ -12,9 +12,7 @@ from tqdm import tqdm
 import chromadb
 
 # Langchain
-from langchain.text_splitter import CharacterTextSplitter
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-#from langchain_experimental.text_splitter import SemanticChunker
 
 # Vertex AI
 from google import genai
@@ -26,9 +24,13 @@ import vertexai
 from vertexai.language_models import TextEmbeddingModel
 from vertexai.generative_models import GenerativeModel, Part
 
+# GCP Storage
+from google.cloud import storage
+
 # GCP related parameters
-GCP_PROJECT     = os.environ["GCP_PROJECT"]
-GCP_LOCATION     = "us-central1"
+GCP_PROJECT  = os.environ["GCP_PROJECT"]
+GCP_BUCKET   = os.environ["GCP_BUCKET"]
+GCP_LOCATION = "us-central1"
 
 # LLM related parameters
 EMBEDDING_MODEL     = "text-embedding-004"
@@ -38,8 +40,11 @@ LLM_MODEL_NAME = "gemini-2.5-flash"
 #LLM_MODEL_NAME = "gemini-2.5-pro"
 
 # Data related parameters
-INPUT_FOLDER     = "dataset"
-OUTPUT_FOLDER    = "outputs"
+INPUT_DIR              = "dataset"
+DECISIONS_DATA_DIR     = "dataset/decisions"
+REGULATIONS_DATA_DIR   = "dataset/regulations"
+DECISION_JSON_FOLDER   = "output_decisions"
+REGULATION_JSON_FOLDER = "output_regulations"
 
 # ChromaDB related parameters
 CHROMADB_HOST    = "ac215-rag-chromadb"
@@ -52,21 +57,20 @@ COLLECTION_NAME  = "ac215-f1-collection"
 # ==============================================================================
 #                                CHUNK THE DATA
 # ==============================================================================
-def chunk():
-    print("chunk()")
+def chunk(input_dir, json_folder):
 
     # Make dataset folders
-    os.makedirs(OUTPUT_FOLDER, exist_ok=True)
-    
+    os.makedirs(json_folder, exist_ok=True)
+     
     # Read PDF files.
-    pdf_files = [f for f in os.listdir(INPUT_FOLDER) if f.endswith('.pdf')]
-    assert len(pdf_files), "No PDF files found in '{INPUT_FOLDER}'. Aborting."
+    pdf_files = [f for f in os.listdir(input_dir) if f.endswith('.pdf')]
+    assert len(pdf_files), "No PDF files found in '{input_dir}'. Aborting."
     print("Number of files to process:", len(pdf_files))
 
     # Process PDF files
     for pdf_file in pdf_files:
         filename = os.path.splitext(pdf_file)[0]
-        filepath = os.path.join(INPUT_FOLDER, pdf_file)
+        filepath = os.path.join(input_dir, pdf_file)
         print("Processing file:", filepath)
         print("filename:", filename)
         
@@ -97,7 +101,7 @@ def chunk():
         data_df = pd.DataFrame(text_chunks, columns=["chunk"])
         data_df["file"] = filename
         
-        jsonl_filename = os.path.join(OUTPUT_FOLDER,
+        jsonl_filename = os.path.join(json_folder,
                                       f"chunks-{filename}.jsonl")
         with open(jsonl_filename, "w") as json_file:
             json_file.write(data_df.to_json(orient='records', lines=True))
@@ -125,11 +129,10 @@ def generate_text_embeddings(chunks,
     assert len(all_embeddings)    
     return all_embeddings
 
-def embed():
-    print("embed()")
+def embed(json_folder):
     
     # Get the list of chunk files
-    jsonl_files = glob.glob(os.path.join(OUTPUT_FOLDER,
+    jsonl_files = glob.glob(os.path.join(json_folder,
                                          f"chunks-*.jsonl"))
     print("Number of files to process:", len(jsonl_files))
 
@@ -180,8 +183,7 @@ def store_text_embeddings(df, collection, batch_size=500):
 
     print(f"Finished inserting {total_inserted} items into collection '{collection.name}'")
 
-def store():
-    print("store()")
+def store(json_folder):
 
     # Clear Cache
     chromadb.api.client.SharedSystemClient.clear_system_cache()
@@ -206,7 +208,7 @@ def store():
     print("Collection:", collection)
 
     # Get the list of embedding files
-    jsonl_files = glob.glob(os.path.join(OUTPUT_FOLDER, f"embeddings-*.jsonl"))
+    jsonl_files = glob.glob(os.path.join(json_folder, f"embeddings-*.jsonl"))
     print("Number of files to process:", len(jsonl_files))
 
     # Process
@@ -222,7 +224,6 @@ def store():
 #                             QUERY THE RAG SYSTEM
 # ==============================================================================
 def query():
-    print("query()")
 
     # Connect to chroma DB
     client = chromadb.HttpClient(host=CHROMADB_HOST, port=CHROMADB_PORT)
@@ -273,15 +274,86 @@ def query():
         print("\n\n Final answer:\n")
         print(response.text)
     except Exception as e:
-        return f"An error occurred: {e}"
+        print(f"An error occurred: {e}")
+
+def is_file_interesting(file_name):
+    substrings = ["Decision", "Summons", "Offence", "Infringement"]
+    for substr in substrings:
+        if substr in file_name:
+            return True
+    return False
+
+def sync_cloud():
+    print("SYNCING FILES FROM GCP BUCKET: " + GCP_BUCKET)
+    
+    # Initialize a client
+    storage_client = storage.Client()
+
+    # Ensure the destination directory exists
+    if not os.path.exists(INPUT_DIR):
+        os.makedirs(INPUT_DIR)
+        os.makedirs(DECISIONS_DATA_DIR)
+        os.makedirs(REGULATIONS_DATA_DIR)
+
+    total_input_files = 0
+    files_downloaded = 0
+
+    try:
+        # Get the bucket object
+        bucket = storage_client.bucket(GCP_BUCKET)
         
+        # List all blobs (files and folder objects)
+        blobs = bucket.list_blobs()
+        
+        for blob in blobs:
+            # GCS doesn't have true folders; they are objects ending in '/'.
+            # prefixes are considered as folders and non-prefixes are considered as files.
+             
+            if not blob.name.endswith('/'):
+                # This is a file object
+                # print(f"  **[FILE]**: gs://{GCP_BUCKET}/{blob.name}")
+                if "raw_pdfs" not in blob.name:
+                    continue
+                
+                if "SEASON" in blob.name:
+                    DEST_DIR = DECISIONS_DATA_DIR
+                else:
+                    DEST_DIR = REGULATIONS_DATA_DIR
+                
+                file_name = os.path.basename(blob.name)
+                #file_path = os.path.join(DEST_DIR, blob.name)
+                file_path = os.path.join(DEST_DIR, file_name)
+
+                # Skip the files that are not of interest.
+                if not is_file_interesting(file_path):
+                    # print(f"    -> Skipped: {file_path}")
+                    continue
+                
+                # Download the file
+                if not os.path.isfile(file_path):
+                    blob.download_to_filename(file_path)
+                    print(f"    -> Downloaded to: {file_path}")
+                    files_downloaded += 1
+                else:
+                    print(f"    -> Already exists: {file_path}")
+                    total_input_files += 1
+    except Exception as e:
+        print(f"\n An error occurred: {e}")
+
+    print("No of files downloaded now: " + str(files_downloaded))
+    print("No of files to process    : " + str(total_input_files))
+
 def main(args=None):
+
     if args.all:
+        sync_cloud()
         chunk()
         embed()
         store()
         query()
     else:
+        if args.sync:
+            sync_cloud()
         if args.chunk:
             chunk()
         if args.embed:
@@ -296,6 +368,11 @@ if __name__ == "__main__":
     # if you type into the terminal '--help', it will provide the description
     parser = argparse.ArgumentParser(description="CLI")
 
+    parser.add_argument(
+        "--sync",
+        action="store_true",
+        help="Sync local dataset with cloud",
+    )
     parser.add_argument(
         "--chunk",
         action="store_true",

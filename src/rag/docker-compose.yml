@@ -9,10 +9,11 @@ services:
         volumes:
             - ../../secrets:/secrets
             - .:/app
-            - ../../dataset:/app/dataset
+            - ../../../Dataset:/app/dataset
         environment:
             GOOGLE_APPLICATION_CREDENTIALS: $GOOGLE_APPLICATION_CREDENTIALS
             GCP_PROJECT: $GCP_PROJECT
+            GCP_BUCKET: $GCP_BUCKET
         depends_on:
             - chromadb
     chromadb:
