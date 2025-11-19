@@ -13,7 +13,7 @@ import chromadb
 from chromadb.config import DEFAULT_TENANT, DEFAULT_DATABASE, Settings
 
 # Langchain
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Vertex AI
 from google import genai
@@ -34,9 +34,9 @@ GCP_BUCKET   = os.environ["GCP_BUCKET"]
 GCP_LOCATION = "us-central1"
 
 # Data related parameters
-DATASET_DIR            = "dataset"
-DECISIONS_DATA_DIR     = "dataset/decisions"
-REGULATIONS_DATA_DIR   = "dataset/regulations"
+DATASET_DIR            = "input"
+DECISIONS_DATA_DIR     = "input/decisions"
+REGULATIONS_DATA_DIR   = "input/regulations"
 
 JSON_OUTPUT_DIR     = "output"
 DECISION_JSON_DIR   = "output/decision_jsons"
@@ -60,27 +60,77 @@ LLM_MODEL_NAME = "gemini-2.5-flash"
 
 
 # ==============================================================================
-#                                SYNC DATASET FROM CLOUD
+#                                CHUNK THE DATA
 # ==============================================================================
 def is_file_interesting(file_name):
-    substrings = ["Decision", "Summons", "Offence", "Infringement"]
+    substrings = ["Decision", "Summons", "Offence", "Infringement", "regulations"]
     for substr in substrings:
         if substr in file_name:
             return True
     return False
 
-def sync_cloud():
-    print("SYNCING FILES FROM GCP BUCKET: " + GCP_BUCKET)
+def chunk_file(filepath, filename, json_folder, counter):
+    #print("Processing file: %s, filecount-%d" %(filepath, counter))
+    #print("filename:", filename)
+
+    embeddings_jsonl = os.path.join(json_folder,
+                                    f"embeddings-{filename}.jsonl")
+    #print("Checking: " + str(embeddings_jsonl))
+     
+    if os.path.isfile(embeddings_jsonl): # File already processed
+        return False
+    
+    print("\nCould not find embedding file: " + str(embeddings_jsonl))
+    print("Chunking file: %s, filecount-%d" %(filepath, counter))
+
+    input_text = ""
+    try:
+        pdf_reader = PdfReader(filepath)
+        for page in pdf_reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                input_text += page_text.replace('\n', ' ') + " "
+    except Exception as e:
+        print(f"Error processing {filepath}: {e}")
+        return False
+
+    # Init the splitter
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE)
+
+    # Perform the splitting
+    text_chunks = None
+    text_chunks = text_splitter.create_documents([input_text])
+    text_chunks = [doc.page_content for doc in text_chunks]
+    #print("Number of chunks:", len(text_chunks))
+    assert len(text_chunks)
+
+    # Save the chunks
+    data_df = pd.DataFrame(text_chunks, columns=["chunk"])
+    data_df["file"] = filename
+
+    jsonl_filename = os.path.join(json_folder,
+                                  f"chunks-{filename}.jsonl")
+    
+    # print("Writing chunks to: " + jsonl_filename)
+    with open(jsonl_filename, "w") as json_file:
+        json_file.write(data_df.to_json(orient='records', lines=True))
+
+    return True
+
+def chunk(tag, json_folder):
+    # Make dataset folders
+    os.makedirs(JSON_OUTPUT_DIR, exist_ok=True)
+    os.makedirs(json_folder, exist_ok=True)
 
     # Initialize a client
     storage_client = storage.Client()
 
     # Ensure the destination directory exists
-    if not os.path.exists(DATASET_DIR):
-        os.makedirs(DATASET_DIR)
+    assert os.path.exists(DATASET_DIR), DATASET_DIR + " does not exist"
 
-    total_input_files = 0
-    files_downloaded = 0
+    total_files = 0
+    files_chunked_now = 0
+    considering_counter = 0
 
     try:
         # Get the bucket object
@@ -89,95 +139,38 @@ def sync_cloud():
         # List all blobs (files and folder objects)
         blobs = bucket.list_blobs()
 
+        counter = 0
         for blob in blobs:
+
             # GCS doesn't have true folders; they are objects ending in '/'.
             # prefixes are considered as folders and non-prefixes are considered as files.
 
-            if not blob.name.endswith('/'):
-                # This is a file object
-                # print(f"  **[FILE]**: gs://{GCP_BUCKET}/{blob.name}")
-                if "raw_pdfs" not in blob.name:
-                    continue
+            if not blob.name.endswith('/'): # This is a file object
+                if "raw_pdfs/"+tag in blob.name:
+                    # Skip the files that are not of interest.
+                    if not is_file_interesting(blob.name):
+                        # print(f"    -> Not interesting: {blob.name}")
+                        continue
+                    
+                    # print(f"  **[FILE]**: gs://{GCP_BUCKET}/{blob.name}") 
+                    considering_counter += 1
+                    
+                    filename = os.path.basename(blob.name)
+                    filename = os.path.splitext(filename)[0]
+                    if chunk_file(blob.name, filename, json_folder, considering_counter):
+                        print(f"    -> CHUNKED: {filename}")
+                        files_chunked_now += 1
+                    else:
+                        # print(f"    -> ALREADY CHUNKED: {filename}")
+                        pass
+                    
+                    total_files += 1
 
-                if "SEASON" in blob.name:
-                    DEST_DIR = DECISIONS_DATA_DIR
-                else:
-                    DEST_DIR = REGULATIONS_DATA_DIR
-
-                file_name = os.path.basename(blob.name)
-                #file_path = os.path.join(DEST_DIR, blob.name)
-                file_path = os.path.join(DEST_DIR, file_name)
-
-                # Skip the files that are not of interest.
-                if not is_file_interesting(file_path):
-                    # print(f"    -> Skipped: {file_path}")
-                    continue
-
-                # Download the file
-                if not os.path.isfile(file_path):
-                    blob.download_to_filename(file_path)
-                    print(f"    -> Downloaded to: {file_path}")
-                    files_downloaded += 1
-                else:
-                    print(f"    -> Already exists: {file_path}")
-                    total_input_files += 1
     except Exception as e:
         print(f"\n An error occurred: {e}")
 
-    print("No of files downloaded now: " + str(files_downloaded))
-    print("No of files to process    : " + str(total_input_files))
-
-# ==============================================================================
-#                                CHUNK THE DATA
-# ==============================================================================
-def chunk(input_dir, json_folder):
-    # Make dataset folders
-    os.makedirs(JSON_OUTPUT_DIR, exist_ok=True)
-    os.makedirs(json_folder, exist_ok=True)
-
-    # Read PDF files.
-    pdf_files = [f for f in os.listdir(input_dir) if f.endswith('.pdf')]
-    assert len(pdf_files), "No PDF files found in '{input_dir}'. Aborting."
-    print("Number of files to process:", len(pdf_files))
-
-    # Process PDF files
-    for pdf_file in pdf_files:
-
-        filename = os.path.splitext(pdf_file)[0]
-        filepath = os.path.join(input_dir, pdf_file)
-        print("Processing file:", filepath)
-        print("filename:", filename)
-
-        input_text = ""
-        try:
-            pdf_reader = PdfReader(filepath)
-            for page in pdf_reader.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    input_text += page_text.replace('\n', ' ') + " "
-        except Exception as e:
-            print(f"Error processing {filepath}: {e}")
-
-        text_chunks = None
-        chunk_size  = CHUNK_SIZE
-
-        # Init the splitter
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size)
-
-        # Perform the splitting
-        text_chunks = text_splitter.create_documents([input_text])
-        text_chunks = [doc.page_content for doc in text_chunks]
-        print("Number of chunks:", len(text_chunks))
-        assert len(text_chunks)
-
-        # Save the chunks
-        data_df = pd.DataFrame(text_chunks, columns=["chunk"])
-        data_df["file"] = filename
-
-        jsonl_filename = os.path.join(json_folder,
-                                      f"chunks-{filename}.jsonl")
-        with open(jsonl_filename, "w") as json_file:
-            json_file.write(data_df.to_json(orient='records', lines=True))
+    print("Total files processed now: " + str(files_chunked_now))
+    print("Total files in the corpus: " + str(total_files))
 
 
 
@@ -210,16 +203,20 @@ def embed(json_folder):
                                          f"chunks-*.jsonl"))
     # print("Number of files to process:", len(jsonl_files))
 
-    counter = 0
+    file_counter = 0
+    embedded_now = 0
     for jsonl_file in jsonl_files:
-        counter += 1
+        file_counter += 1
         
         # Save embeddings into corresponding file.
         jsonl_filename = jsonl_file.replace("chunks-", "embeddings-")
         if os.path.isfile(jsonl_filename): # File already processed
+            #print("%s - ALREADY EMBEDDED. File count: %d" %(jsonl_file, file_counter))
             continue
         else:
-            print("Processing file: %s, file count: %d" %(jsonl_file, counter))
+            print("%s - NOW EMBEDDING, File count: %d" %(jsonl_file, file_counter))
+        
+        embedded_now += 1
 
         data_df = pd.read_json(jsonl_file, lines=True)
 
@@ -230,6 +227,10 @@ def embed(json_folder):
 
         with open(jsonl_filename, "w") as json_file:
             json_file.write(data_df.to_json(orient='records', lines=True))
+
+    print("Embedded files in folder: " + json_folder)
+    print("No of files embedded now: " + str(embedded_now))
+    print("No of files embedded total: " + str(file_counter))
 
 # ==============================================================================
 #                        STORE EMBEDDINGS INTO CHROMADB
@@ -258,7 +259,7 @@ def store_text_embeddings(df, collection, batch_size=500):
         total_inserted += len(batch)
         #print(f"Inserted {total_inserted} items...")
 
-    #print(f"Finished inserting {total_inserted} items into collection '{collection.name}'")
+   # print(f"Finished inserting {total_inserted} items into collection '{collection.name}'")
 
 def store(json_folder, target_collection):
 
@@ -289,7 +290,6 @@ def store(json_folder, target_collection):
     # Process
     for jsonl_file in jsonl_files:
         print("Processing file:", jsonl_file)
-
         data_df = pd.read_json(jsonl_file, lines=True)
         
         # Store data
@@ -368,11 +368,9 @@ def query():
 def main(args=None):
 
     if args.all:
-        sync_cloud()
-        
-        chunk(DECISIONS_DATA_DIR, DECISION_JSON_DIR)
-        chunk(REGULATIONS_DATA_DIR, REGULATION_JSON_DIR)
-        
+        chunk("decisions", DECISION_JSON_DIR)
+        chunk("regulations", REGULATION_JSON_DIR)
+       
         embed(DECISION_JSON_DIR)
         embed(REGULATION_JSON_DIR)
         
@@ -384,8 +382,8 @@ def main(args=None):
         if args.sync:
             sync_cloud()
         if args.chunk:
-            chunk(DECISIONS_DATA_DIR, DECISION_JSON_DIR)
-            chunk(REGULATIONS_DATA_DIR, REGULATION_JSON_DIR)
+            chunk("decisions", DECISION_JSON_DIR)
+            chunk("regulations", REGULATION_JSON_DIR)
         if args.embed:
             embed(DECISION_JSON_DIR)
             embed(REGULATION_JSON_DIR)

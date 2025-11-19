@@ -1,22 +1,32 @@
 #!/bin/bash
 
-# exit immediately if a command exits with a non-zero status
 set -e
 
-# Set vairables
 export BASE_DIR=$(pwd)
-#export PERSISTENT_DIR=$(pwd)/../persistent-folder/
 export SECRETS_DIR=$(pwd)/../../secrets/
+export IMAGE_NAME="ac215-rag"
+
+export GOOGLE_APPLICATION_CREDENTIALS="/secrets/ac215-f1penaltytool.json"
 export GCP_BUCKET="f1penaltydocs"
 export GCP_PROJECT="ac215-f1penaltytool"
-export GOOGLE_APPLICATION_CREDENTIALS="../../secrets/ac215-f1penaltytool.json"
-export IMAGE_NAME="ac215-rag-cli"
+export GCP_ZONE="us-central1-a"
 
-# Create the network if we don't have it yet
-docker network inspect ac215-rag-network >/dev/null 2>&1 || docker network create ac215-rag-network
-
-# Build the image based on the Dockerfile
+echo "Building image"
 docker build -t $IMAGE_NAME -f Dockerfile .
 
-# Run All Containers
+echo "Running container"
+
+#docker run --rm --name $IMAGE_NAME -ti \
+#--cap-add SYS_ADMIN \
+#--device /dev/fuse \
+#-v "$BASE_DIR":/app \
+#-v "$SECRETS_DIR":/secrets \
+#-v "chromadb":/chroma/chroma \
+#-e GOOGLE_APPLICATION_CREDENTIALS=$GOOGLE_APPLICATION_CREDENTIALS \
+#-e GCP_BUCKET=$GCP_BUCKET \
+#-e GCP_PROJECT=$GCP_PROJECT \
+#-e GCP_ZONE=$GCP_ZONE \
+#-p 8000:8000 \
+#$IMAGE_NAME
+
 docker-compose run --rm --service-ports $IMAGE_NAME

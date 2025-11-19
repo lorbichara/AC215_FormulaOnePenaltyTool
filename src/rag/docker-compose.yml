@@ -1,22 +1,23 @@
-networks:
-    default:
-        name: ac215-rag-network
-        external: true
 services:
-    ac215-rag-cli:
-        image: ac215-rag-cli
-        container_name: ac215-rag-cli
+    ac215-rag:
+        image: ac215-rag
+        container_name: ac215-rag
+        privileged: true
         volumes:
-            - ../../secrets:/secrets
+            - ../../../secrets:/secrets
             - .:/app
-            - ../../../Dataset:/app/dataset
+            - ../../../Dataset:/app/input
             - ../../../Output:/app/output
+        devices:
+            - "/dev/fuse:/dev/fuse"
         environment:
             GOOGLE_APPLICATION_CREDENTIALS: $GOOGLE_APPLICATION_CREDENTIALS
             GCP_PROJECT: $GCP_PROJECT
             GCP_BUCKET: $GCP_BUCKET
+            MOUNT_POINT: "/mnt/gcs_data"
         depends_on:
             - chromadb
+
     chromadb:
         image: chromadb/chroma:latest
         container_name: ac215-rag-chromadb
