@@ -3,7 +3,8 @@
 # all data files
 src/datapipeline/data/
 dataset/
-outputs/
+input/
+output/
 secrets/
 
 # all pycache files
