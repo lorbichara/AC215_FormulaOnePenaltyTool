@@ -43,8 +43,10 @@ DECISION_JSON_DIR   = "output/decision_jsons"
 REGULATION_JSON_DIR = "output/regulation_jsons"
 
 # ChromaDB related parameters
-CHROMADB_HOST    = "ac215-rag-chromadb"
+#CHROMADB_HOST    = "ac215-rag-chromadb"
 #CHROMADB_HOST    = "localhost"
+CHROMADB_HOST   = os.environ["CHROMADB_HOST"]
+CHROMADB_PORT   = os.environ["CHROMADB_PORT"]
 CHROMADB_PORT    = 8000
 CHUNK_SIZE       = 350
 
