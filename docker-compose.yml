@@ -4,7 +4,7 @@ services:
         container_name: ac215-rag
         privileged: true
         volumes:
-            - ./secrets:/secrets
+            - ../secrets:/secrets
             - .:/app
             - ../Dataset:/app/input
             - ../Output:/app/output
@@ -15,6 +15,8 @@ services:
             GCP_PROJECT: $GCP_PROJECT
             GCP_BUCKET: $GCP_BUCKET
             MOUNT_POINT: "/mnt/gcs_data"
+            CHROMADB_HOST: ac215-rag-chromadb
+            CHROMADB_PORT: 8000
         depends_on:
             - chromadb
 
