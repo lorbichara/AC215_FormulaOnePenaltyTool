@@ -4,10 +4,10 @@ services:
         container_name: ac215-rag
         privileged: true
         volumes:
-            - ../../../secrets:/secrets
+            - ./secrets:/secrets
             - .:/app
-            - ../../../Dataset:/app/input
-            - ../../../Output:/app/output
+            - ../Dataset:/app/input
+            - ../Output:/app/output
         devices:
             - "/dev/fuse:/dev/fuse"
         environment:

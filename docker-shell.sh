@@ -3,7 +3,7 @@
 set -e
 
 export BASE_DIR=$(pwd)
-export SECRETS_DIR=$(pwd)/../../secrets/
+export SECRETS_DIR=$(pwd)/secrets/
 export IMAGE_NAME="ac215-rag"
 
 export GOOGLE_APPLICATION_CREDENTIALS="/secrets/ac215-f1penaltytool.json"
