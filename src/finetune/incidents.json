@@ -1,0 +1,30 @@
+[
+    {
+      "current_id": "UNIQUE_IDENTIFIER_FOR_CURRENT_INCIDENT",
+      "precedent_ids": [
+        "UNIQUE_IDENTIFIER_FOR_PRECEDENT_1",
+        "UNIQUE_IDENTIFIER_FOR_PRECEDENT_2"
+      ],
+      "question": "Was the penalty fair? (Replace with the actual question the user would ask)",
+      "gold_answer": "[Incident Summary]\n- Driver: \n- Race: \n- Infringement: \n- Penalty Applied: \n\n[Comparable Precedents]\n1) <Precedent A summary>\n   Similarities:\n   Differences:\n2) <Precedent B summary>\n   Similarities:\n   Differences:\n\n[Fairness Framework]\n- Safety Impact: \n- Advantage Gained: \n- Intent: \n- Consistency with Precedent: \n\n[Fairness Score]\nScore: X/5\nJudgement: \nExplanation: "
+    },
+    {
+        "current_id": "UNIQUE_IDENTIFIER_FOR_CURRENT_INCIDENT",
+        "precedent_ids": [
+          "UNIQUE_IDENTIFIER_FOR_PRECEDENT_1",
+          "UNIQUE_IDENTIFIER_FOR_PRECEDENT_2"
+        ],
+        "question": "Was the penalty fair? (Replace with the actual question the user would ask)",
+        "gold_answer": "[Incident Summary]\n- Driver: \n- Race: \n- Infringement: \n- Penalty Applied: \n\n[Comparable Precedents]\n1) <Precedent A summary>\n   Similarities:\n   Differences:\n2) <Precedent B summary>\n   Similarities:\n   Differences:\n\n[Fairness Framework]\n- Safety Impact: \n- Advantage Gained: \n- Intent: \n- Consistency with Precedent: \n\n[Fairness Score]\nScore: X/5\nJudgement: \nExplanation: "
+      },
+    {
+    "current_id": "UNIQUE_IDENTIFIER_FOR_CURRENT_INCIDENT",
+    "precedent_ids": [
+        "UNIQUE_IDENTIFIER_FOR_PRECEDENT_1",
+        "UNIQUE_IDENTIFIER_FOR_PRECEDENT_2"
+    ],
+    "question": "Was the penalty fair? (Replace with the actual question the user would ask)",
+    "gold_answer": "[Incident Summary]\n- Driver: \n- Race: \n- Infringement: \n- Penalty Applied: \n\n[Comparable Precedents]\n1) <Precedent A summary>\n   Similarities:\n   Differences:\n2) <Precedent B summary>\n   Similarities:\n   Differences:\n\n[Fairness Framework]\n- Safety Impact: \n- Advantage Gained: \n- Intent: \n- Consistency with Precedent: \n\n[Fairness Score]\nScore: X/5\nJudgement: \nExplanation: "
+    }
+]
+  
