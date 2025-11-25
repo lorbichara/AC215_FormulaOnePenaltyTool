@@ -60,6 +60,9 @@ EMBEDDING_DIMENSION = 256
 LLM_MODEL_NAME = "gemini-2.5-flash"
 #LLM_MODEL_NAME = "gemini-2.5-pro"
 
+FINETUNED_MODEL_NAME = "projects/ac215-f1penaltytool/locations/us-central1/models/547845962190553088"
+
+
 
 # ==============================================================================
 #                                CHUNK THE DATA
@@ -358,7 +361,8 @@ def query():
     """
 
     # STEP-7: Send context and query to target LLM.
-    llm_model = GenerativeModel(LLM_MODEL_NAME)
+    # llm_model = GenerativeModel(LLM_MODEL_NAME)
+    llm_model = GenerativeModel(FINETUNED_MODEL_NAME)
     print("\n Sending prompt to the LLM...")
     try:
         response = llm_model.generate_content(prompt_template)
