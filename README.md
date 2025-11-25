@@ -62,3 +62,19 @@ For this milestone, we applied feedback received in Milestone 2 including:
 - Add a dedicated folder for reports/documents (MS1 proposal, MS3 midterm presentation)
 - Include repository structure in the main README
 - Updated the UI mock up, see [here](https://twine-claw-08738571.figma.site)
+
+## Milestone 4
+#### Application Design
+See [Application design doc](reports/Milestone4-ApplicationDesignDocument.pdf) for more details on the application architecture and code organization
+
+#### APIs and Frontend
+To-Do
+
+#### CI and Testing
+To-Do
+
+#### Data Versioning
+To-Do
+
+#### Model Fine-Tuning
+See [Fine-Tuning README](src/finetuning/README.md) for more details on the fine tuning set up.
