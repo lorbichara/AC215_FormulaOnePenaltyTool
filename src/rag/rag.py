@@ -56,7 +56,9 @@ EMBEDDING_MODEL     = "text-embedding-004"
 EMBEDDING_DIMENSION = 256
 
 LLM_MODEL_NAME = "gemini-2.5-flash"
-FINETUNED_MODEL_NAME = "projects/ac215-f1penaltytool/locations/us-central1/models/547845962190553088"
+FINETUNED_MODEL_NAME = (
+    "projects/ac215-f1penaltytool/locations/us-central1/endpoints/547845962190553088"
+)
 
 DEBUG_LEVEL_HIGH = 2
 DEBUG_LEVEL_MED  = 1
@@ -442,8 +444,9 @@ def query(user_query):
     """
 
     # STEP-7: Send context and query to target LLM.
-    llm_model = GenerativeModel(LLM_MODEL_NAME)
-    #llm_model = GenerativeModel(FINETUNED_MODEL_NAME)
+    # llm_model = GenerativeModel(LLM_MODEL_NAME)
+    llm_model = GenerativeModel(FINETUNED_MODEL_NAME)
+
     DEBUG(DEBUG_LEVEL_HIGH, "\nSending prompt to the LLM...")
     answer = ""
     try:
@@ -495,7 +498,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--query",
         type=str,
-        required=True,
         help="Query vector db and chat with LLM",
     )
     parser.add_argument(
