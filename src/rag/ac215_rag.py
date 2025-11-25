@@ -361,8 +361,8 @@ def query():
     """
 
     # STEP-7: Send context and query to target LLM.
-    # llm_model = GenerativeModel(LLM_MODEL_NAME)
-    llm_model = GenerativeModel(FINETUNED_MODEL_NAME)
+    llm_model = GenerativeModel(LLM_MODEL_NAME)
+    # llm_model = GenerativeModel(FINETUNED_MODEL_NAME)
     print("\n Sending prompt to the LLM...")
     try:
         response = llm_model.generate_content(prompt_template)
