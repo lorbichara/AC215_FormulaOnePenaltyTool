@@ -77,4 +77,4 @@ To-Do
 To-Do
 
 #### Model Fine-Tuning
-See [Fine-Tuning README](src/finetuning/README.md) for more details on the fine tuning set up.
+See [Fine-Tuning README](src/finetune/README.md) for more details on the fine tuning set up.
