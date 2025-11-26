@@ -14,9 +14,10 @@ services:
         devices:
             - "/dev/fuse:/dev/fuse"
         environment:
-            GOOGLE_APPLICATION_CREDENTIALS: $GOOGLE_APPLICATION_CREDENTIALS
-            GCP_PROJECT: $GCP_PROJECT
-            GCP_BUCKET: $GCP_BUCKET
+            GOOGLE_APPLICATION_CREDENTIALS: "/secrets/ac215-f1penaltytool.json"
+            GCP_PROJECT: "ac215-f1penaltytool"
+            GCP_BUCKET: "f1penaltydocs"
+            GCP_ZONE: "us-central1-a"
             MOUNT_POINT: "/mnt/gcs_data"
             CHROMADB_HOST: ac215-chromadb
             CHROMADB_PORT: 8000
