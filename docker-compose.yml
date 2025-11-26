@@ -9,8 +9,6 @@ services:
         volumes:
             - ../secrets:/secrets
             - .:/app
-            - ../Dataset:/app/input
-            - ../Output:/app/output
         devices:
             - "/dev/fuse:/dev/fuse"
         environment:
