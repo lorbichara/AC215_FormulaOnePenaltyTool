@@ -4,6 +4,18 @@ This directory contains the full workflow for preparing and fine-tuning a Gemini
 
 The pipeline transforms FIA race-control PDFs → structured incidents → labeled gold answers → JSONL datasets → Gemini-compatible training data → a fine-tuned model to use inside the RAG pipeline.
 
+## Summary
+There were 2 areas where we figured we could fine-tune a model for:
+- Style of reasoning and structure of explanations (how to cite regulations in a standardized way, etc.)
+- Improve fairness analysis reasoning
+
+Ultimately we went with the fairness analysis part, as it would provide more value for our project. It reasons based on precedent, uses a consistent framework for fairness scoring, and provides a judgement based on historical patterns. Fine-tuning for this would require some additional work while creating the test data, of manually labeling penalties as fair or not, so this was done based on judgement.
+
+Since we used Gemini 2.5-Flash for Milestone 2, we decided to keep using this model and tune it using Vertex AI's capabilities as listed [here](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/gemini-use-supervised-tuning). The technique used is supervised fine fine-tuning using lightweight adapters. Some benefits of this technique include lower compute costs and faster training while still delivering good results.
+
+## Logs
+Logs can be found [here](./logs).
+
 ## Directory Structure
 ```bash
 finetune/
@@ -83,11 +95,13 @@ Validation dataset →
 
 ### 7. Fine-Tune Gemini 2.5 Flash (Using Vertex AI Console)
 Fine-tuning parameters used:
-| Setting    | Value |
-| -------- | ------- |
-| Epochs  | 3    |
-| Learning rate multiplier | 1e-5     |
-| Adapter size    | Default (≈ LoRA rank 64)    |
+
+We used a conservative, production-oriented configuration (3 epochs, small LR, default adapter size) to efficiently adapt Gemini 2.5 Flash to our task while preserving the stability and general capabilities of the base model.
+| Setting    | Value | Rationale |
+| -------- | ------- | ------- |
+| Epochs  | 3    | Wanted model to see full training set multiple times but avoid overfitting.    |
+| Learning rate multiplier | 1e-5     | To preserve the general abilities of the model but nudging it to our specific task.    |
+| Adapter size    | Default (≈ LoRA rank 64)    | Relied on Vertex AI's default adapter size which is comparable to a LoRA rank of 64. Sweet spot between keeping the number of trainable parameters small to avoid high costs but enough to have a good model.    |
 
 ![alt text](./assets/finetune.png)
 ![alt text](./assets/finetune_results.png)
