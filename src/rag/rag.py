@@ -1,4 +1,5 @@
 import os
+import sys
 import argparse
 import pandas as pd
 import glob
@@ -129,7 +130,7 @@ def chunk_file(filepath, filename, json_folder, counter):
 
     return ERROR_CODE_SUCCESS
 
-def chunk(tag, json_folder):
+def chunk(tag, json_folder, limit):
 
     # Make dataset folders
     os.makedirs(JSON_OUTPUT_DIR, exist_ok=True)
@@ -154,6 +155,8 @@ def chunk(tag, json_folder):
         blobs = bucket.list_blobs()
 
         for blob in blobs:
+            if total_files >= limit:
+                break
 
             # GCS doesn't have true folders; they are objects ending in '/'.
             # prefixes are considered as folders and non-prefixes are
@@ -199,14 +202,15 @@ def chunk(tag, json_folder):
     return ret_str, ERROR_CODE_SUCCESS
 
 
-def create_chunks():
-    ret_str, ret_val = chunk("decisions", DECISION_JSON_DIR)
+def create_chunks(limit=sys.maxsize):
+    DEBUG(DEBUG_LEVEL_LOW, "CHUNK LIMIT: " + str(limit))
+    ret_str, ret_val = chunk("decisions", DECISION_JSON_DIR, int(limit))
     ret_str_1 = "\nChunking for decision files done. \n" + ret_str + "\n"
     if ret_val == ERROR_CODE_GCS_FAILURE:
         DEBUG(DEBUG_LEVEL_HIGH, ret_str_1)
         return ret_str_1, ERROR_CODE_GCS_FAILURE
 
-    ret_str, ret_val = chunk("regulations", REGULATION_JSON_DIR)
+    ret_str, ret_val = chunk("regulations", REGULATION_JSON_DIR, int(limit))
     ret_str_2 = "\nChunking for regulation files done. \n" + ret_str
 
     ret_str = ret_str_1 + ret_str_2
@@ -243,7 +247,7 @@ def generate_text_embeddings(chunks, batch_size=250):  # Max for Vertex AI
     return all_embeddings
 
 
-def embed(json_folder):
+def embed(json_folder, limit):
     ret_val = ERROR_CODE_SUCCESS
 
     # Get the list of chunk files
@@ -253,6 +257,8 @@ def embed(json_folder):
     file_counter = 0
     embedded_now = 0
     for jsonl_file in jsonl_files:
+        if file_counter >= limit:
+            break
         file_counter += 1
 
         # Save embeddings into corresponding file.
@@ -300,14 +306,15 @@ def embed(json_folder):
     return ret_str, ret_val
 
 
-def create_embeddings():
-    ret_str, ret_val = embed(DECISION_JSON_DIR)
+def create_embeddings(limit=sys.maxsize):
+    DEBUG(DEBUG_LEVEL_LOW, "EMBEDDING LIMIT: " + str(limit))
+    ret_str, ret_val = embed(DECISION_JSON_DIR, int(limit))
     ret_str_1 = "\nEmbedding for decision files done. \n" + ret_str + "\n"
     if ret_val == ERROR_CODE_GCS_FAILURE:
         DEBUG(DEBUG_LEVEL_HIGH, ret_str_1)
         return ret_str_1, ERROR_CODE_GCS_FAILURE
 
-    ret_str, ret_val = embed(REGULATION_JSON_DIR)
+    ret_str, ret_val = embed(REGULATION_JSON_DIR, int(limit))
     ret_str_2 = "\nEmbedding for regulation files done. \n" + ret_str + "\n"
 
     ret_str = ret_str_1 + ret_str_2
@@ -351,7 +358,7 @@ def store_text_embeddings(df, collection, batch_size=500):
         raise
 
 
-def store(json_folder, target_collection):
+def store(json_folder, target_collection, testing):
     ret_val = ERROR_CODE_SUCCESS
 
     # Clear Cache
@@ -389,6 +396,8 @@ def store(json_folder, target_collection):
     # Process
     stored_files = 0
     for jsonl_file in jsonl_files:
+        if testing == True:
+            break
         DEBUG(DEBUG_LEVEL_LOW, "Processing file: %s" % jsonl_file)
 
         data_df = pd.read_json(jsonl_file, lines=True)
@@ -406,15 +415,17 @@ def store(json_folder, target_collection):
     return ret_str, ret_val
 
 
-def store_embeddings():
-    ret_str, ret_val = store(DECISION_JSON_DIR, DECISIONS_COLLECTION_NAME)
+def store_embeddings(testing=False):
+    ret_str, ret_val = store(DECISION_JSON_DIR, DECISIONS_COLLECTION_NAME,
+                             bool(testing))
     ret_str_1 = "\nStoring of embeddings of decision files in chromadb done."
     ret_str_1 += "\n" + ret_str + "\n"
     if ret_val != ERROR_CODE_SUCCESS:
         DEBUG(DEBUG_LEVEL_HIGH, ret_str_1)
         return ret_str_1, HTTP_CODE_GENERIC_FAILURE
 
-    ret_str, ret_val = store(REGULATION_JSON_DIR, REGULATIONS_COLLECTION_NAME)
+    ret_str, ret_val = store(REGULATION_JSON_DIR, REGULATIONS_COLLECTION_NAME,
+                             bool(testing))
     ret_str_2 = "\nStoring of embeddings of regulation files in chromadb done."
     ret_str_2 += "\n" + ret_str
 

@@ -4,7 +4,9 @@ from fastapi.responses import HTMLResponse
 
 from starlette.middleware.cors import CORSMiddleware
 
-import rag
+#from rag import rag
+#from . import rag as rag
+import rag as rag
 
 # Setup FastAPI app
 app = FastAPI(title="API Server", description="API Server", version="v1")
@@ -23,25 +25,33 @@ app.add_middleware(
 async def get_index():
     return {"message": "Welcome to Formula One Penalty Analysis Tool"}
 
+@app.get("/health")
+async def health_check():
+    ret_str = "healthy"
+    html_content = f"""
+        {ret_str}
+    """
+    return HTMLResponse(content=html_content, status_code=200)
+
 @app.get("/chunk/")
-async def create_chunks():
-    ret_str, ret_val = rag.create_chunks()
+async def create_chunks(limit: int):
+    ret_str, ret_val = rag.create_chunks(limit)
     html_content = f"""
         {ret_str}
     """
     return HTMLResponse(content=html_content, status_code=200)
 
 @app.get("/embed/")
-async def create_embeddings():
-    ret_str, ret_val = rag.create_embeddings()
+async def create_embeddings(limit: int):
+    ret_str, ret_val = rag.create_embeddings(limit)
     html_content = f"""
         {ret_str}
     """
     return HTMLResponse(content=html_content, status_code=200)
 
 @app.get("/store/")
-async def store_embeddings():
-    ret_str, ret_val = rag.store_embeddings()
+async def store_embeddings(testing: bool):
+    ret_str, ret_val = rag.store_embeddings(testing)
     html_content = f"""
         {ret_str}
     """
