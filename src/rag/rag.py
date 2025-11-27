@@ -26,13 +26,13 @@ GCP_BUCKET = os.environ["GCP_BUCKET"]
 GCP_LOCATION = "us-central1"
 
 # Data related parameters
-DATASET_DIR = "input"
-DECISIONS_DATA_DIR = "input/decisions"
-REGULATIONS_DATA_DIR = "input/regulations"
+DATASET_DIR = os.environ["DATASET_DIR"]
+DECISIONS_DATA_DIR = DATASET_DIR + "/decisions"
+REGULATIONS_DATA_DIR = DATASET_DIR + "/regulations"
 
-JSON_OUTPUT_DIR = "output"
-DECISION_JSON_DIR = "output/decision_jsons"
-REGULATION_JSON_DIR = "output/regulation_jsons"
+JSON_OUTPUT_DIR = os.environ["OUTPUT_DIR"]
+DECISION_JSON_DIR = JSON_OUTPUT_DIR + "/decision_jsons"
+REGULATION_JSON_DIR = JSON_OUTPUT_DIR + "/regulation_jsons"
 
 # ChromaDB related parameters
 
@@ -49,16 +49,18 @@ EMBEDDING_MODEL = "text-embedding-004"
 EMBEDDING_DIMENSION = 256
 
 # LLM_MODEL_NAME = "gemini-2.5-flash"
-LLM_MODEL_NAME = "projects/ac215-f1penaltytool/locations/us-central1/endpoints/547845962190553088"
+LLM_MODEL_NAME = os.environ["LLM_MODEL_NAME"]
 
 DEBUG_LEVEL_HIGH = 2
 DEBUG_LEVEL_MED = 1
 DEBUG_LEVEL_LOW = 0
 global_debug_level = DEBUG_LEVEL_MED
 
+
 def DEBUG(level, input_string):
     if level >= global_debug_level:
         print(input_string)
+
 
 # Error codes for chunking process
 ERROR_CODE_SUCCESS = 0
@@ -70,29 +72,24 @@ ERROR_CODE_CHROMADB_FAILED = 4
 HTTP_CODE_GENERIC_SUCCESS = 200
 HTTP_CODE_GENERIC_FAILURE = 400
 
+
 # =============================================================================
 #                                CHUNK THE DATA
 # =============================================================================
 def is_file_interesting(file_name):
-    substrings = ["Decision",
-                  "Summons",
-                  "Offence",
-                  "Infringement",
-                  "regulations"]
+    substrings = ["Decision", "Summons", "Offence", "Infringement", "regulations"]
     for substr in substrings:
         if substr in file_name:
             return True
     return False
 
+
 def chunk_file(filepath, filename, json_folder, counter):
-    DEBUG(DEBUG_LEVEL_LOW,
-          "Processing file: %s, filecount-%d" % (filepath, counter))
+    DEBUG(DEBUG_LEVEL_LOW, "Processing file: %s, filecount-%d" % (filepath, counter))
     DEBUG(DEBUG_LEVEL_LOW, "filename: %s" % (filename))
 
-    embeddings_jsonl = os.path.join(json_folder,
-                                    f"embeddings-{filename}.jsonl")
-    DEBUG(DEBUG_LEVEL_LOW,
-          "Checking for embedding file: " + str(embeddings_jsonl))
+    embeddings_jsonl = os.path.join(json_folder, f"embeddings-{filename}.jsonl")
+    DEBUG(DEBUG_LEVEL_LOW, "Checking for embedding file: " + str(embeddings_jsonl))
 
     if os.path.isfile(embeddings_jsonl):  # File already processed
         return ERROR_CODE_ALREADY_CHUNKED
@@ -129,6 +126,7 @@ def chunk_file(filepath, filename, json_folder, counter):
         json_file.write(data_df.to_json(orient="records", lines=True))
 
     return ERROR_CODE_SUCCESS
+
 
 def chunk(tag, json_folder, limit):
 
@@ -170,8 +168,7 @@ def chunk(tag, json_folder, limit):
                         continue
 
                     DEBUG(
-                        DEBUG_LEVEL_LOW,
-                        f"  **[FILE]**: gs://{GCP_BUCKET}/{blob.name}"
+                        DEBUG_LEVEL_LOW, f"  **[FILE]**: gs://{GCP_BUCKET}/{blob.name}"
                     )
                     considering_counter += 1
 
@@ -230,7 +227,7 @@ def generate_text_embeddings(chunks, batch_size=250):  # Max for Vertex AI
     model = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL)
 
     for i in range(0, len(chunks), batch_size):
-        batch = chunks[i: i + batch_size]
+        batch = chunks[i : i + batch_size]
         try:
             embeddings = model.get_embeddings(
                 batch, output_dimensionality=EMBEDDING_DIMENSION
@@ -238,8 +235,7 @@ def generate_text_embeddings(chunks, batch_size=250):  # Max for Vertex AI
             all_embeddings.extend([embedding.values for embedding in embeddings])
         except Exception as e:
             DEBUG(
-                DEBUG_LEVEL_HIGH,
-                f"Failed to generate embeddings. Last error: {str(e)}"
+                DEBUG_LEVEL_HIGH, f"Failed to generate embeddings. Last error: {str(e)}"
             )
             raise
 
@@ -266,15 +262,13 @@ def embed(json_folder, limit):
         if os.path.isfile(jsonl_filename):  # File already processed
             DEBUG(
                 DEBUG_LEVEL_LOW,
-                "%s - ALREADY EMBEDDED. File count: %d" % (jsonl_file,
-                                                           file_counter),
+                "%s - ALREADY EMBEDDED. File count: %d" % (jsonl_file, file_counter),
             )
             continue
         else:
             DEBUG(
                 DEBUG_LEVEL_MED,
-                "%s - NOW EMBEDDING, File count: %d" % (jsonl_file,
-                                                        file_counter),
+                "%s - NOW EMBEDDING, File count: %d" % (jsonl_file, file_counter),
             )
 
         data_df = pd.read_json(jsonl_file, lines=True)
@@ -282,12 +276,10 @@ def embed(json_folder, limit):
         chunks = data_df["chunk"].values
         chunks = chunks.tolist()
         try:
-            data_df["embedding"] = generate_text_embeddings(chunks,
-                                                            batch_size=100)
+            data_df["embedding"] = generate_text_embeddings(chunks, batch_size=100)
         except Exception as e:
             DEBUG(
-                DEBUG_LEVEL_LOW,
-                f"Failed to generate embeddings. Last error: {str(e)}"
+                DEBUG_LEVEL_LOW, f"Failed to generate embeddings. Last error: {str(e)}"
             )
 
             ret_val = ERROR_CODE_GCS_FAILURE
@@ -342,7 +334,7 @@ def store_text_embeddings(df, collection, batch_size=500):
     try:
         for i in range(0, df.shape[0], batch_size):
             # Create a copy of the batch and reset the index
-            batch = df.iloc[i: i + batch_size].copy().reset_index(drop=True)
+            batch = df.iloc[i : i + batch_size].copy().reset_index(drop=True)
 
             ids = batch["id"].tolist()
             documents = batch["chunk"].tolist()
@@ -352,8 +344,7 @@ def store_text_embeddings(df, collection, batch_size=500):
             total_inserted += len(batch)
     except Exception as e:
         DEBUG(
-            DEBUG_LEVEL_HIGH,
-            f"Failed to store embeddings in chromadb. Error: {str(e)}"
+            DEBUG_LEVEL_HIGH, f"Failed to store embeddings in chromadb. Error: {str(e)}"
         )
         raise
 
@@ -371,8 +362,7 @@ def store(json_folder, target_collection, testing):
     try:
         # Clear out any existing items in the collection
         client.delete_collection(name=target_collection)
-        DEBUG(DEBUG_LEVEL_LOW,
-              f"Deleted existing collection '{target_collection}'")
+        DEBUG(DEBUG_LEVEL_HIGH, f"Deleted existing collection '{target_collection}'")
     except Exception:
         DEBUG(
             DEBUG_LEVEL_LOW,
@@ -383,20 +373,17 @@ def store(json_folder, target_collection, testing):
     collection = client.create_collection(
         name=target_collection, metadata={"hnsw:space": "cosine"}
     )
-    DEBUG(DEBUG_LEVEL_HIGH,
-          f"Created new empty collection '{target_collection}'")
+    DEBUG(DEBUG_LEVEL_HIGH, f"Created new empty collection '{target_collection}'")
     DEBUG(DEBUG_LEVEL_LOW, "Collection: %s" % collection)
 
     # Get the list of embedding files
-    jsonl_files = glob.glob(os.path.join(json_folder,
-                                         "embeddings-*.jsonl"))
-    DEBUG(DEBUG_LEVEL_MED,
-          "Number of files to process: %d" % len(jsonl_files))
+    jsonl_files = glob.glob(os.path.join(json_folder, "embeddings-*.jsonl"))
+    DEBUG(DEBUG_LEVEL_MED, "Number of files to process: %d" % len(jsonl_files))
 
     # Process
     stored_files = 0
     for jsonl_file in jsonl_files:
-        if testing == True:
+        if testing:
             break
         DEBUG(DEBUG_LEVEL_LOW, "Processing file: %s" % jsonl_file)
 
@@ -405,8 +392,7 @@ def store(json_folder, target_collection, testing):
             # Store data
             store_text_embeddings(data_df, collection)
         except Exception:
-            DEBUG(DEBUG_LEVEL_HIGH,
-                  "Failed to store %s in chromadb:" % jsonl_file)
+            DEBUG(DEBUG_LEVEL_HIGH, "Failed to store %s in chromadb:" % jsonl_file)
             ret_val = ERROR_CODE_CHROMADB_FAILED
             break
         stored_files += 1
@@ -416,22 +402,25 @@ def store(json_folder, target_collection, testing):
 
 
 def store_embeddings(testing=False):
-    ret_str, ret_val = store(DECISION_JSON_DIR, DECISIONS_COLLECTION_NAME,
-                             bool(testing))
+    ret_str, ret_val = store(
+        DECISION_JSON_DIR, DECISIONS_COLLECTION_NAME, bool(testing)
+    )
     ret_str_1 = "\nStoring of embeddings of decision files in chromadb done."
     ret_str_1 += "\n" + ret_str + "\n"
     if ret_val != ERROR_CODE_SUCCESS:
         DEBUG(DEBUG_LEVEL_HIGH, ret_str_1)
         return ret_str_1, HTTP_CODE_GENERIC_FAILURE
 
-    ret_str, ret_val = store(REGULATION_JSON_DIR, REGULATIONS_COLLECTION_NAME,
-                             bool(testing))
+    ret_str, ret_val = store(
+        REGULATION_JSON_DIR, REGULATIONS_COLLECTION_NAME, bool(testing)
+    )
     ret_str_2 = "\nStoring of embeddings of regulation files in chromadb done."
     ret_str_2 += "\n" + ret_str
 
     ret_str = ret_str_1 + ret_str_2
     DEBUG(DEBUG_LEVEL_MED, ret_str)
     return ret_str, ret_val
+
 
 # ==============================================================================
 #                             QUERY THE RAG SYSTEM
@@ -462,8 +451,7 @@ def query(user_query):
 
     # STEP-4: Retrieve relevant regulations.
     try:
-        decision_collection = \
-                client.get_collection(name=DECISIONS_COLLECTION_NAME)
+        decision_collection = client.get_collection(name=DECISIONS_COLLECTION_NAME)
     except Exception:
         ret_str = f"Collection '{DECISIONS_COLLECTION_NAME}' does not exist."
         DEBUG(DEBUG_LEVEL_HIGH, ret_str)
@@ -476,8 +464,7 @@ def query(user_query):
 
     # STEP-5: Retrieve similar past decisions.
     try:
-        regulation_collection = \
-                client.get_collection(name=REGULATIONS_COLLECTION_NAME)
+        regulation_collection = client.get_collection(name=REGULATIONS_COLLECTION_NAME)
     except Exception:
         ret_str = f"Collection '{REGULATIONS_COLLECTION_NAME}' does not exist."
         DEBUG(DEBUG_LEVEL_HIGH, ret_str)
@@ -531,6 +518,7 @@ def query(user_query):
 
     return "\n" + answer, HTTP_CODE_GENERIC_SUCCESS
 
+
 def main(args=None):
 
     if args.all:
@@ -547,6 +535,7 @@ def main(args=None):
             store_embeddings()
         if args.query:
             query(args.query)
+
 
 if __name__ == "__main__":
     # Generate the inputs arguments parser
