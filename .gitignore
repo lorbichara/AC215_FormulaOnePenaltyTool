@@ -5,7 +5,6 @@ src/datapipeline/data/
 dataset/
 input/
 output/
-secrets/
 
 # all pycache files
 **/__pycache__/
