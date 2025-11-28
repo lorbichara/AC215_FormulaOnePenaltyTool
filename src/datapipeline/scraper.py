@@ -8,12 +8,19 @@ from urllib.parse import urljoin, quote, urlsplit, urlunsplit, unquote
 import time
 from google.cloud import storage
 
+
 class FIA_Scraper:
     """
     A class to scrape F1 race control PDF documents from the official FIA website.
     """
 
-    def __init__(self, base_url: str, output_dir: str, upload_to_gcs: bool = False, bucket_name: str = None):
+    def __init__(
+        self,
+        base_url: str,
+        output_dir: str,
+        upload_to_gcs: bool = False,
+        bucket_name: str = None,
+    ):
         """
         Initializes the FIA_Scraper.
 
@@ -53,7 +60,9 @@ class FIA_Scraper:
     def _encode_url(self, url):
         parts = urlsplit(url)
         path = quote(parts.path)
-        return urlunsplit((parts.scheme, parts.netloc, path, parts.query, parts.fragment))
+        return urlunsplit(
+            (parts.scheme, parts.netloc, path, parts.query, parts.fragment)
+        )
 
     def _upload_to_gcs(self, content, destination_blob_name):
         """Uploads a file to the bucket."""
@@ -77,8 +86,19 @@ class FIA_Scraper:
         target_url = f"{self.base_url}?_cb={int(time.time())}"
         response = self.session.get(target_url, headers=self._get_random_headers())
         soup = BeautifulSoup(response.text, "html.parser")
-        season_options = soup.find('select', id='facetapi_select_facet_form_3').find_all('option')
-        seasons = sorted([(option.text.strip(), self._encode_url(urljoin(self.base_url, option['value']))) for option in season_options if option['value'] != '0'])
+        season_options = soup.find(
+            "select", id="facetapi_select_facet_form_3"
+        ).find_all("option")
+        seasons = sorted(
+            [
+                (
+                    option.text.strip(),
+                    self._encode_url(urljoin(self.base_url, option["value"])),
+                )
+                for option in season_options
+                if option["value"] != "0"
+            ]
+        )
         print(f"Found {len(seasons)} seasons.")
 
         # Level 2: Get all event URLs for each season
@@ -89,8 +109,19 @@ class FIA_Scraper:
             target_url = f"{season_url}?_cb={int(time.time())}"
             response = self.session.get(target_url, headers=self._get_random_headers())
             soup = BeautifulSoup(response.text, "html.parser")
-            event_options = soup.find('select', id='facetapi_select_facet_form_2').find_all('option')
-            events = sorted([(option.text.strip(), self._encode_url(urljoin(self.base_url, option['value']))) for option in event_options if option['value'] != '0'])
+            event_options = soup.find(
+                "select", id="facetapi_select_facet_form_2"
+            ).find_all("option")
+            events = sorted(
+                [
+                    (
+                        option.text.strip(),
+                        self._encode_url(urljoin(self.base_url, option["value"])),
+                    )
+                    for option in event_options
+                    if option["value"] != "0"
+                ]
+            )
             print(f"Found {len(events)} events in this season.")
 
             # Level 3: Get all PDF URLs for each event
@@ -99,34 +130,49 @@ class FIA_Scraper:
                     break
                 try:
                     target_url = f"{event_url}?_cb={int(time.time())}"
-                    response = self.session.get(target_url, headers=self._get_random_headers())
+                    response = self.session.get(
+                        target_url, headers=self._get_random_headers()
+                    )
                     soup = BeautifulSoup(response.text, "html.parser")
-                    pdf_urls = {self._encode_url(urljoin(self.base_url, a['href'])) for a in soup.find_all("a", href=re.compile(r"\.pdf$"))}
-                    
+                    pdf_urls = {
+                        self._encode_url(urljoin(self.base_url, a["href"]))
+                        for a in soup.find_all("a", href=re.compile(r"\.pdf$"))
+                    }
+
                     for pdf_url in pdf_urls:
                         if limit is not None and downloaded_count >= limit:
                             break
-                        
+
                         filename = unquote(pdf_url.split("/")[-1])
-                        
+
                         if self.upload_to_gcs:
-                            destination_blob_name = f"raw_pdfs/{season_name}/{event_name}/{filename}"
+                            destination_blob_name = (
+                                f"raw_pdfs/{season_name}/{event_name}/{filename}"
+                            )
                             try:
-                                response = self.session.get(pdf_url, headers=self._get_random_headers())
-                                self._upload_to_gcs(response.content, destination_blob_name)
+                                response = self.session.get(
+                                    pdf_url, headers=self._get_random_headers()
+                                )
+                                self._upload_to_gcs(
+                                    response.content, destination_blob_name
+                                )
                                 downloaded_count += 1
                             except requests.exceptions.RequestException as e:
                                 print(f"Could not download {pdf_url}: {e}")
                         else:
-                            event_dir = os.path.join(self.output_dir, season_name, event_name)
+                            event_dir = os.path.join(
+                                self.output_dir, season_name, event_name
+                            )
                             os.makedirs(event_dir, exist_ok=True)
                             filepath = os.path.join(event_dir, filename)
-                            
+
                             if os.path.exists(filepath):
                                 print(f"Skipping existing file: {filename}")
                                 continue
                             try:
-                                response = self.session.get(pdf_url, headers=self._get_random_headers())
+                                response = self.session.get(
+                                    pdf_url, headers=self._get_random_headers()
+                                )
                                 with open(filepath, "wb") as f:
                                     f.write(response.content)
                                 downloaded_count += 1

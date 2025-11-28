@@ -5,18 +5,18 @@ Tests the actual API endpoints with HTTP requests
 
 import pytest
 import requests
-import time
-
 
 # Base URL for the API (assumes API is running)
 API_BASE_URL = "http://localhost:9000"
+
 
 def is_api_running():
     """Check if API is accessible"""
     try:
         response = requests.get(f"{API_BASE_URL}/health", timeout=2)
         return response.status_code == 200
-    except:
+    except Exception as e:
+        print(f"An error occurred: {e}")
         return False
 
 
@@ -60,11 +60,18 @@ class TestAPIEndpoints:
         response = requests.get(f"{API_BASE_URL}/store?testing=True")
         assert response.status_code == 200
         assert response.headers["Content-Type"] == "text/html; charset=utf-8"
-        assert "Storing of embeddings of decision files in chromadb done" in response.text
-        assert "Storing of embeddings of regulation files in chromadb done" in response.text
+        assert (
+            "Storing of embeddings of decision files in chromadb done" in response.text
+        )
+        assert (
+            "Storing of embeddings of regulation files in chromadb done"
+            in response.text
+        )
 
     def test_query(self):
         """Test llm query endpoint"""
-        response = requests.get(f"{API_BASE_URL}/query?prompt=Is the Car 30 infringement in 2024 Abu Dhabi Grand Prix a fair penalty")
+        response = requests.get(
+            f"{API_BASE_URL}/query?prompt=Is the Car 30 infringement in 2024 Abu Dhabi Grand Prix a fair penalty"
+        )
         assert response.status_code == 200
         assert response.headers["Content-Type"] == "text/html; charset=utf-8"

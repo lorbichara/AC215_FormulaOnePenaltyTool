@@ -2,10 +2,11 @@
 
 # all data files
 src/datapipeline/data/
-dataset/
-input/
-output/
+src/rag/input
+src/rag/output
+/dataset
+/input
+/output
 
 # all pycache files
 **/__pycache__/
-/input

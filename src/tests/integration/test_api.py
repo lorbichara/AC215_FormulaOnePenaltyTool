@@ -44,6 +44,7 @@ class TestAPIEndpoints:
         assert response.headers["Content-Type"] == "text/html; charset=utf-8"
         assert "healthy" in response.text
 
+
 class TestCORS:
     """Tests for CORS configuration"""
 
