@@ -10,8 +10,8 @@ services:
         devices:
             - "/dev/fuse:/dev/fuse"
         environment:
-            DATASET_DIR: "/app/src/rag/input"
-            OUTPUT_DIR: "/app/src/rag/output"
+            DATASET_DIR: "/app/input"
+            OUTPUT_DIR: "/app/output"
             GOOGLE_APPLICATION_CREDENTIALS: "/app/secrets/ac215-f1penaltytool.json"
             GCP_PROJECT: "ac215-f1penaltytool"
             GCP_BUCKET: "f1penaltydocs"
@@ -19,7 +19,8 @@ services:
             MOUNT_POINT: "/mnt/gcs_data"
             CHROMADB_HOST: ac215-chromadb
             CHROMADB_PORT: 8000
-            LLM_MODEL_NAME: "projects/ac215-f1penaltytool/locations/us-central1/endpoints/547845962190553088"
+            UVICORN_PORT: 9000
+            LLM_MODEL: "projects/ac215-f1penaltytool/locations/us-central1/endpoints/547845962190553088"
         depends_on:
             - chromadb
 

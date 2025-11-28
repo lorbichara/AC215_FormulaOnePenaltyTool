@@ -4,12 +4,19 @@ from tqdm import tqdm
 from google.cloud import storage
 import io
 
+
 class PDF_Converter:
     """
     A class to convert PDF documents to text.
     """
 
-    def __init__(self, input_dir: str, output_dir: str, upload_to_gcs: bool = False, bucket_name: str = None):
+    def __init__(
+        self,
+        input_dir: str,
+        output_dir: str,
+        upload_to_gcs: bool = False,
+        bucket_name: str = None,
+    ):
         """
         Initializes the PDF_Converter.
 
@@ -52,8 +59,10 @@ class PDF_Converter:
         blobs = self.gcs_client.list_blobs(self.bucket_name, prefix="raw_pdfs/")
         for blob in tqdm(blobs, desc="Converting PDFs from GCS"):
             if blob.name.endswith(".pdf"):
-                destination_blob_name = blob.name.replace("raw_pdfs/", "processed_txt/").replace(".pdf", ".txt")
-                
+                destination_blob_name = blob.name.replace(
+                    "raw_pdfs/", "processed_txt/"
+                ).replace(".pdf", ".txt")
+
                 # Check if the .txt file already exists in GCS
                 if self.bucket.blob(destination_blob_name).exists():
                     print(f"Skipping existing file: {destination_blob_name}")
@@ -72,14 +81,18 @@ class PDF_Converter:
     def _convert_from_local(self):
         """Converts all PDF documents in the input directory to text, preserving the directory structure."""
         for root, dirs, files in os.walk(self.input_dir):
-            for file in tqdm(files, desc=f"Converting PDFs in {os.path.basename(root)}"):
+            for file in tqdm(
+                files, desc=f"Converting PDFs in {os.path.basename(root)}"
+            ):
                 if file.endswith(".pdf"):
                     pdf_path = os.path.join(root, file)
-                    
+
                     # Create the corresponding output directory structure
                     relative_path = os.path.relpath(pdf_path, self.input_dir)
-                    txt_path = os.path.join(self.output_dir, os.path.splitext(relative_path)[0] + ".txt")
-                    
+                    txt_path = os.path.join(
+                        self.output_dir, os.path.splitext(relative_path)[0] + ".txt"
+                    )
+
                     output_subdir = os.path.dirname(txt_path)
                     os.makedirs(output_subdir, exist_ok=True)
 
@@ -93,7 +106,7 @@ class PDF_Converter:
                             text = ""
                             for page in pdf.pages:
                                 text += page.extract_text() or ""
-                        
+
                         with open(txt_path, "w", encoding="utf-8") as f:
                             f.write(text)
                     except Exception as e:

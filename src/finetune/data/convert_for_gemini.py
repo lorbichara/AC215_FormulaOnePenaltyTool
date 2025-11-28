@@ -1,12 +1,15 @@
 import json
 
+
 def convert_jsonl(in_path, out_path):
     """
     Converts a JSONL file with {"input": ..., "output": ...}
     into Gemini Console fine-tuning format with "contents".
     """
-    with open(in_path, "r", encoding="utf-8") as f_in, \
-         open(out_path, "w", encoding="utf-8") as f_out:
+    with (
+        open(in_path, "r", encoding="utf-8") as f_in,
+        open(out_path, "w", encoding="utf-8") as f_out,
+    ):
 
         for line in f_in:
             if not line.strip():
@@ -16,14 +19,8 @@ def convert_jsonl(in_path, out_path):
 
             converted = {
                 "contents": [
-                    {
-                        "role": "user",
-                        "parts": [{"text": ex["input"]}]
-                    },
-                    {
-                        "role": "model",
-                        "parts": [{"text": ex["output"]}]
-                    }
+                    {"role": "user", "parts": [{"text": ex["input"]}]},
+                    {"role": "model", "parts": [{"text": ex["output"]}]},
                 ]
             }
 

@@ -1,29 +1,31 @@
 import re
 import json
-import os
 from pathlib import Path
 import pdfplumber
 
-DATA_ROOT = Path("src/datapipeline/data")   # <--- YOUR DATA LOCATION
+DATA_ROOT = Path("src/datapipeline/data")  # <--- YOUR DATA LOCATION
+
 
 def is_penalty_document(text):
     """
     Identify real FIA 'Decision' or 'Offence' documents.
     """
-    return (
-        "From The Stewards" in text
-        and ("Offence" in text or "Decision" in text or "Fact" in text)
+    return "From The Stewards" in text and (
+        "Offence" in text or "Decision" in text or "Fact" in text
     )
+
 
 def extract_field(pattern, text):
     match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
     return match.group(1).strip() if match else None
+
 
 def generate_incident_id(grand_prix, year, driver_number, fact):
     gp = re.sub(r"[^a-z0-9]", "", grand_prix.lower().replace("grandprix", "gp"))
     short_fact = fact[:30].lower().replace(" ", "_")
     short_fact = re.sub(r"[^a-z0-9_]", "", short_fact)
     return f"{year}_{gp}_{driver_number}_{short_fact}"
+
 
 def parse_pdf(path):
     """
@@ -76,6 +78,7 @@ def parse_pdf(path):
 
     return data
 
+
 def parse_all_pdfs(data_root=DATA_ROOT, output_json="incidents_raw.json"):
     """
     Recursively walk through src/datapipeline/data/<season> directories
@@ -84,7 +87,7 @@ def parse_all_pdfs(data_root=DATA_ROOT, output_json="incidents_raw.json"):
     incidents = []
     pdf_count = 0
 
-    for pdf_path in data_root.rglob("*.pdf"):   # <--- RECURSIVE
+    for pdf_path in data_root.rglob("*.pdf"):  # <--- RECURSIVE
         pdf_count += 1
         parsed = parse_pdf(pdf_path)
         if parsed:
@@ -103,6 +106,7 @@ def parse_all_pdfs(data_root=DATA_ROOT, output_json="incidents_raw.json"):
 
     return incidents
 
+
 if __name__ == "__main__":
     import sys
 
@@ -111,4 +115,3 @@ if __name__ == "__main__":
         parse_all_pdfs(data_root=folder)
     else:
         parse_all_pdfs()  # default scans all seasons
-

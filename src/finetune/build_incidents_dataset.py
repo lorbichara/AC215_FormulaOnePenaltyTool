@@ -1,7 +1,6 @@
 import json
-import re
 from pathlib import Path
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
@@ -13,6 +12,7 @@ OUT_PATH = Path("src/finetune/data/incidents.json")
 
 
 # ---------- helpers ----------
+
 
 def load_raw_incidents() -> List[Dict[str, Any]]:
     with RAW_PATH.open("r") as f:
@@ -31,11 +31,13 @@ def is_real_incident(item: Dict[str, Any]) -> bool:
     if not item.get("fact") or not item.get("decision"):
         return False
 
-    text = " ".join([
-        item.get("file_name", ""),
-        item.get("fact", "") or "",
-        item.get("decision", "") or "",
-    ]).lower()
+    text = " ".join(
+        [
+            item.get("file_name", ""),
+            item.get("fact", "") or "",
+            item.get("decision", "") or "",
+        ]
+    ).lower()
 
     # Filter out timing sheets, schedule notes, etc.
     bad_keywords = [
@@ -64,11 +66,13 @@ def infer_category(item: Dict[str, Any]) -> str:
     Rough incident category based on fact/offence/filename.
     Used only for grouping similar incidents for precedents.
     """
-    text = " ".join([
-        item.get("file_name", ""),
-        item.get("fact", "") or "",
-        item.get("offence", "") or "",
-    ]).lower()
+    text = " ".join(
+        [
+            item.get("file_name", ""),
+            item.get("fact", "") or "",
+            item.get("offence", "") or "",
+        ]
+    ).lower()
 
     if "collision" in text or "collided" in text:
         return "collision"
@@ -84,7 +88,11 @@ def infer_category(item: Dict[str, Any]) -> str:
         return "power_unit"
     if "parc ferme" in text:
         return "parc_ferme"
-    if "incorrect starting location" in text or "moved before start signal" in text or "jump start" in text:
+    if (
+        "incorrect starting location" in text
+        or "moved before start signal" in text
+        or "jump start" in text
+    ):
         return "start_procedure"
     if "equipment in the pit lane" in text:
         return "pit_lane_equipment"
@@ -191,7 +199,9 @@ def build_gold_answer_template(
             )
             lines.append(line)
     else:
-        lines.append("\n1) <Add a precedent manually>\n   Similarities:\n   Differences:")
+        lines.append(
+            "\n1) <Add a precedent manually>\n   Similarities:\n   Differences:"
+        )
 
     framework = """
 [Fairness Framework]
@@ -220,6 +230,7 @@ def build_question(inc: Dict[str, Any]) -> str:
 
 
 # ---------- main pipeline ----------
+
 
 def build_incidents_dataset() -> List[Dict[str, Any]]:
     print(f"Loading raw incidents from {RAW_PATH} ...")

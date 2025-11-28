@@ -1,19 +1,22 @@
 import json
+from pathlib import Path
 import tempfile
 import subprocess
-from pathlib import Path
 import hashlib
 
 INCIDENTS_PATH = Path("src/finetune/data/incidents.json")
 BACKUP_PATH = Path("src/finetune/data/incidents_backup.json")
 
+
 def load_incidents():
     with INCIDENTS_PATH.open("r") as f:
         return json.load(f)
 
+
 def save_incidents(data):
     with INCIDENTS_PATH.open("w") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
 
 def show_incident(inc):
     meta = inc["meta"]
@@ -25,6 +28,7 @@ def show_incident(inc):
     print(f"Fact       : {meta['fact']}")
     print(f"Decision   : {meta['decision']}")
     print("=" * 80)
+
 
 def get_precedents(inc, all_incidents):
     items = []
@@ -43,12 +47,10 @@ def get_precedents(inc, all_incidents):
             items.append(p)
     return items
 
+
 def make_json_safe(text):
-    return (
-        text.replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-    )
+    return text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+
 
 def build_blank_template(current_inc, precedents):
     meta = current_inc["meta"]
@@ -56,7 +58,9 @@ def build_blank_template(current_inc, precedents):
 
     t.append("[Incident Summary]")
     t.append(f"- Driver: {meta['driver_name']} (Car {meta['driver_number']})")
-    t.append(f"- Race: {meta['year']} {meta['grand_prix']} Grand Prix ({meta['session']})")
+    t.append(
+        f"- Race: {meta['year']} {meta['grand_prix']} Grand Prix ({meta['session']})"
+    )
     t.append(f"- Infringement: {meta['fact']}")
     t.append(f"- Penalty Applied: {meta['decision']}")
     t.append("")
@@ -85,11 +89,11 @@ def build_blank_template(current_inc, precedents):
 
     return "\n".join(t)
 
+
 def open_editor_with_text(initial_text):
     """
     Open macOS TextEdit to edit the gold_answer.
     """
-    import tempfile, subprocess
 
     # Create temp file
     with tempfile.NamedTemporaryFile(suffix=".txt", delete=False, mode="w+") as tf:
@@ -100,15 +104,19 @@ def open_editor_with_text(initial_text):
     # Open with TextEdit
     subprocess.call(["open", "-a", "TextEdit", temp_path])
 
-    input("\nPress ENTER when you have finished editing and saved the file in TextEdit... ")
+    input(
+        "\nPress ENTER when you have finished editing and saved the file in TextEdit... "
+    )
 
     # Read saved content back
     with open(temp_path, "r") as f:
         return f.read()
 
+
 # -------------------------------------------------------------------------
 # NEW: DUPLICATE DETECTION
 # -------------------------------------------------------------------------
+
 
 def make_signature(inc):
     """
@@ -127,6 +135,7 @@ def make_signature(inc):
     # Handle symmetric collision wording
     # Look for patterns like "car 22 collided with car 81"
     import re
+
     match = re.search(r"car\s*(\d+)\s*collided with car\s*(\d+)", fact)
     if match:
         a, b = sorted([match.group(1), match.group(2)])
@@ -134,13 +143,14 @@ def make_signature(inc):
         fact = f"collision cars {a}-{b}"
 
     key = (
-        safe(meta.get("grand_prix")) +
-        safe(meta.get("year")) +
-        safe(meta.get("session")) +
-        fact
+        safe(meta.get("grand_prix"))
+        + safe(meta.get("year"))
+        + safe(meta.get("session"))
+        + fact
     )
 
     return hashlib.md5(key.encode("utf-8")).hexdigest()
+
 
 def detect_duplicates(incidents):
     signatures = {}
@@ -151,6 +161,8 @@ def detect_duplicates(incidents):
         else:
             inc["duplicate"] = False
             signatures[sig] = True
+
+
 # -------------------------------------------------------------------------
 
 
@@ -187,7 +199,9 @@ def labeling_loop():
 
         redo = "y"
         if inc["labeled"]:
-            redo = input("\nAlready labeled. Re-do this incident? (y/n): ").strip().lower()
+            redo = (
+                input("\nAlready labeled. Re-do this incident? (y/n): ").strip().lower()
+            )
 
         if redo != "y":
             continue
@@ -217,6 +231,6 @@ def labeling_loop():
 
     print("\nLabeling complete or paused. Resume anytime.")
 
+
 if __name__ == "__main__":
-    import os
     labeling_loop()

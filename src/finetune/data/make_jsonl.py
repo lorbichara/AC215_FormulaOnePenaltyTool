@@ -21,11 +21,12 @@ random.seed(42)
 random.shuffle(labeled)
 
 train = labeled[:80]
-valid = labeled[80:101]   # 21 total
+valid = labeled[80:101]  # 21 total
 
 print(f"Train: {len(train)}, Validation: {len(valid)}")
 
 # ------------------ Build Option A prompt ------------------
+
 
 def build_input(inc):
     meta = inc["meta"]
@@ -70,14 +71,16 @@ def clean_output(text):
     """
     return text.replace("\\n", "\n")
 
+
 # ------------------ Write JSONL files ------------------
+
 
 def write_jsonl(path, examples):
     with open(path, "w", encoding="utf-8") as f:
         for inc in examples:
             row = {
                 "input": build_input(inc),
-                "output": clean_output(inc.get("gold_answer", ""))
+                "output": clean_output(inc.get("gold_answer", "")),
             }
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
     print(f"Wrote: {path}")

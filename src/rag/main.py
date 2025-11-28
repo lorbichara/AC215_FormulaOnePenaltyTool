@@ -1,12 +1,15 @@
+import os
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
 from starlette.middleware.cors import CORSMiddleware
 
-#from rag import rag
-#from . import rag as rag
+# from rag import rag
+# from . import rag as rag
 import rag as rag
+
+UVICORN_PORT = os.environ["UVICORN_PORT"]
 
 # Setup FastAPI app
 app = FastAPI(title="API Server", description="API Server", version="v1")
@@ -20,10 +23,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Routes
 @app.get("/")
 async def get_index():
     return {"message": "Welcome to Formula One Penalty Analysis Tool"}
+
 
 @app.get("/health")
 async def health_check():
@@ -33,6 +38,7 @@ async def health_check():
     """
     return HTMLResponse(content=html_content, status_code=200)
 
+
 @app.get("/chunk/")
 async def create_chunks(limit: int):
     ret_str, ret_val = rag.create_chunks(limit)
@@ -40,6 +46,7 @@ async def create_chunks(limit: int):
         {ret_str}
     """
     return HTMLResponse(content=html_content, status_code=200)
+
 
 @app.get("/embed/")
 async def create_embeddings(limit: int):
@@ -49,6 +56,7 @@ async def create_embeddings(limit: int):
     """
     return HTMLResponse(content=html_content, status_code=200)
 
+
 @app.get("/store/")
 async def store_embeddings(testing: bool):
     ret_str, ret_val = rag.store_embeddings(testing)
@@ -56,6 +64,7 @@ async def store_embeddings(testing: bool):
         {ret_str}
     """
     return HTMLResponse(content=html_content, status_code=200)
+
 
 @app.get("/query/")
 async def query_llm(prompt: str):
@@ -65,5 +74,6 @@ async def query_llm(prompt: str):
     """
     return HTMLResponse(content=html_content, status_code=ret_val)
 
+
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=9000, log_level="info")
+    uvicorn.run("main:app", host="0.0.0.0", port=int(UVICORN_PORT), log_level="info")

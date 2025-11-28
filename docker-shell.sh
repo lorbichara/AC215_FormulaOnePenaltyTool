@@ -13,7 +13,12 @@ echo "Running container"
 #  NOTE: docker-compose adds some suffix to the container name
 #
 
-#docker compose run --rm --service-ports --name rag rag
+docker kill rag || true
+docker rm rag || true
+docker kill ac215-chroma || true
+docker rm ac215-chroma || true
+
+docker compose run --rm --service-ports --name rag rag
 
 #docker compose up
-docker compose up -d rag
+#docker compose up -d rag

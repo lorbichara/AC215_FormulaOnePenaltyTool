@@ -36,18 +36,18 @@ jobs:
 
       - name: Wait for server to be ready
         run: |
-          echo "Waiting for server to start..."
+          echo "Waiting for API backend server to start..."
           sleep 120
           curl -f http://localhost:9000/ || exit 1
 
       - name: Run Black formatter check
         run: |
-          docker exec rag /.venv/bin/black --check --line-length 120 api/
+          docker exec rag /.venv/bin/black --check --diff --quiet src/
         continue-on-error: true
 
       - name: Run Flake8 linter
         run: |
-          docker exec rag /.venv/bin/flake8 --max-line-length=120 --extend-ignore=E203,W503 api/
+          docker exec rag /.venv/bin/flake8 --max-line-length=140  --extend-ignore=E203,W503 src/
         continue-on-error: true
 
       - name: Run integration tests
