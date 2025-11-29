@@ -303,9 +303,9 @@ This process ensures that anyone checking out a specific Git commit will automat
 ---
 
 ### Frontend
-To-Do
+See [Frontend README](src/frontend/frontend-template/README.md) for more details on the fine tuning set up.
 
 ---
 
 #### Model Fine-Tuning
-See [Fine-Tuning README](src/finetuning/README.md) for more details on the fine tuning set up.
+See [Fine-Tuning README](src/finetune/README.md) for more details on the fine tuning set up.
