@@ -488,7 +488,7 @@ def query(user_query):
     DEBUG(DBG_LVL_HIGH, answer)
 
     if ret_val != ERROR_CODE_SUCCESS:
-        return ret_val, HTTP_CODE_GENERIC_FAILURE
+        return answer, HTTP_CODE_GENERIC_FAILURE
 
     return "\n" + answer, HTTP_CODE_GENERIC_SUCCESS
 

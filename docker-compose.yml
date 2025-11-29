@@ -35,3 +35,17 @@ services:
             - IS_PERSISTENT=TRUE
             - ANONYMIZED_TELEMETRY=FALSE
             - CHROMA_CORS_ALLOW_ORIGINS=["*"] # This is not recommended for production environments.
+
+    frontend:
+        image: f1-frontend
+        container_name: frontend
+        ports:
+            - "3001:3000"
+        volumes:
+            - ./src/frontend/frontend-template:/app
+        environment:
+            - NEXT_PUBLIC_BASE_API_URL=http://localhost:9000
+        entrypoint: [ "/bin/sh", "-c" ]
+        command: [ "npm install && npm run dev" ]
+        depends_on:
+            - rag
