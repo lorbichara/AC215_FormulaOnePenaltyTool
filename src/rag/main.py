@@ -1,7 +1,7 @@
 import os
 import uvicorn
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from starlette.middleware.cors import CORSMiddleware
 
@@ -69,10 +69,12 @@ async def store_embeddings(testing: bool):
 @app.get("/query/")
 async def query_llm(prompt: str):
     ret_str, ret_val = rag.query(prompt)
-    html_content = f"""
-        {ret_str}
-    """
-    return HTMLResponse(content=html_content, status_code=ret_val)
+    if ret_val == rag.HTTP_CODE_GENERIC_SUCCESS:
+        return JSONResponse(content={"response": ret_str}, status_code=ret_val)
+    else:
+        http_status = ret_val if ret_val >= 400 else 500
+        return JSONResponse(content={"error": ret_str}, status_code=http_status)
+
 
 
 if __name__ == "__main__":

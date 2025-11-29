@@ -1,0 +1,30 @@
+import './globals.css';
+import { ThemeProvider } from 'next-themes';
+import Header from '@/components/layout/Header';
+import Footer from '@/components/layout/Footer';
+
+export const metadata = {
+    title: 'F1 Penalty Explainer',
+    description: 'An application to analyze and understand Formula 1 penalties using historical data and official regulations.',
+}
+
+export default function RootLayout({ children }) {
+    return (
+        <html lang="en" className="h-full" suppressHydrationWarning>
+            <head>
+				<link rel="preconnect" href="https://fonts.googleapis.com" />
+				<link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="true" />
+				<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
+				<link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@600;700&display=swap" rel="stylesheet" />
+                <link href="assets/logo.jpeg" rel="shortcut icon" type="image/x-icon"></link>
+            </head>
+            <body className="flex flex-col min-h-screen">
+                <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+                    <Header />
+                    <main className="flex-grow pt-16">{children}</main>
+                    <Footer />
+                </ThemeProvider>
+            </body>
+        </html>
+    );
+}
