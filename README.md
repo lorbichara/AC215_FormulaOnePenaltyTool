@@ -8,6 +8,7 @@
 ## Group Name
 Formula One Penalty Tool
 
+
 ## Project Organization
 
 ```
@@ -39,13 +40,13 @@ Formula One Penalty Tool
         └── assets
 ```
 
+---
+
 ## Project
 This project aims to make Formula 1 penalties more transparent and understandable for fans. Governed by the FIA, F1 penalties often appear inconsistent due to the complexity of the Sporting and Technical Regulations. This application takes a given race penalty and provides an accessible explanation of the infringement, referencing the official FIA regulations. It also analyzes the fairness of the penalty by comparing it to historical cases, helping users better grasp how penalties are determined and whether they align with past precedents.
 
 ## Milestone 1
 See Milestone 1 [here](reports/Milestone1.pdf).
-
-TEST [test] (reports/Milestone1.pfd).
 
 ## Milestone 2
 In this milestone, we have set up the core infrastrucutre of the project. This include setting up the environment, as well as a data collection pipeline and a RAG setup.
@@ -83,10 +84,10 @@ This endpoint provides a simple welcome message.
 | `GET` | `/` | Welcome message to the API. | `application/json` |
 
 * *Example Response (Status 200):* *
-```json  
-{  
-  "message": "Welcome to Formula One Penalty Analysis Tool"  
-} 
+```json
+{
+  "message": "Welcome to Formula One Penalty Analysis Tool"
+}
 ```
 #### **API ENDPOINT: '/chunk'**
 This endpoint is used to manage the data processing pipeline, transforming source documents (regulations, etc.) into a searchable vector database.
@@ -159,16 +160,16 @@ GET /store
 * 200 (OK): Query processed successfully.
 * Other Codes: Indicate an error during the RAG execution (e.g., retrieval failure, LLM timeout).
 
-#### **API ENDPOINT: /query**  
+#### **API ENDPOINT: /query**
 This endpoint is primarily used to interact with the LLM and RAG system, retrieving relevant information and generating answers based on the processed F1 data.
 
 | Method | Endpoint | Description | Response Content Type |
 | :--- | :--- | :--- | :--- |
 | 'GET' | '/query' | Sends query to RAG engine and returns status string | 'text/html'|
 
-**Example Request:**  
+**Example Request:**
 ```http
-`GET /query/?prompt=What is the standard penalty for an unsafe release during a pit stop?`
+GET /query/?prompt=What is the standard penalty for an unsafe release during a pit stop?
 ```
 
 **Response Format**
@@ -190,13 +191,26 @@ This endpoint is primarily for unit testing.
 | :--- | :--- | :--- | :--- |
 | 'GET' | '/health' | Returns the status ""healthy" | 'text/html'|
 
+#### Example snapshot of API backend server interface using http.
+The examples produced here are based on a local instantiation of API backend server that responds to http://localhost:8000
+![](reports/API_Server.png).
+
+---
 
 ### CI and Testing
+This project utilizes a robust CI/CD pipeline to ensure rapid and reliable software delivery. A critical component of this pipeline is our comprehensive testing strategy.
+To enable Continuous Integration and Continuous Delivery (CI/CD), we have introduced two distinct types of automated test suites:
+
+| Test Suite Type | Purpose | Environment |
+| :--- | :--- | :--- |
+| **Dry-Run Testing** | Performs fundamental unit and integration testing of components. | **No Functional API** (Backend server is mocked/unnecessary) |
+| **API Validation** | Queries and validates live HTTP requests, ensuring correct behavior and data formats. | **Functional RAG Backend API Server** |
+
 
 #### API Endpoint Integration Tests
 
-Ths test suite uses **`pytest`** to verify the expected behavior and responses of the core API endpoints, focusing on standard HTTP status codes, etc without actually running a functional API backend server.  
-The tests are defined within the `TestAPIEndpoints` class.  
+Ths test suite uses **`pytest`** to verify the expected behavior and responses of the core API endpoints, focusing on standard HTTP status codes, etc.
+This test suite will execute standalone without a functional API backend server.
 
 | Test Function | Description | Key Assertions |
 | :--- | :--- | :--- |
@@ -206,7 +220,7 @@ The tests are defined within the `TestAPIEndpoints` class.
 | `test_method_not_allowed` | Confirms that attempting to use an **unsupported HTTP method** (like `POST`) on a `GET`-only endpoint (like `/`) returns a `405 Method Not Allowed` error. | **Status Code:** `405` (Method Not Allowed) |
 | `test_method_health` | Checks the **`/health` endpoint** for basic API operational status. | **Status Code:** `200` (OK)<br>**Header:** `Content-Type` is set to `"text/html; charset=utf-8"`<br>**Response Body:** Contains the text `"healthy"`. |
 
-**Running the Tests**  
+**Running the integration tests**
 These tests can be run using the `pytest` command from the terminal:
 ```bash
 pytest src/tests/integration -v --tb=short
@@ -215,9 +229,8 @@ pytest src/tests/integration -v --tb=short
 #### API Endpoint System Tests
 This test suite contains a set of integration tests designed to verify that the backend API server is running correctly and that all major endpoints respond as expected over HTTP. These tests use pytest and make real HTTP calls to the API, ensuring end-to-end functionality.
 
-**Prerequisites**
-* A fully functional API backend server **must be running** at `localhost:9000`.
-* The tests are **skipped** if the API is not detected as running (via `@pytest.mark.skipif(not is_api_running(), ...)`).
+This test suite expects a fully functional API backend server which responds to *https* requests via `localhost:9000`.
+The tests will **skip** executuin if the API backend is unresponsive.
 
 | Test Method | Endpoint | Description | Assertions |
 | :--- | :--- | :--- | :--- |
@@ -230,12 +243,16 @@ This test suite contains a set of integration tests designed to verify that the 
 
 ---
 
-**Running the Tests**  
+**Running the system tests**
 These tests can be run using the `pytest` command from the terminal:
 ```bash
 pytest src/tests/system -v --tb=short
 ```
 
+#### Example snapshot of CI/CD execution on Github repository
+<img src="reports/Gitrun.png">
+
+---
 
 ### Data Versioning with DVC
 
@@ -257,8 +274,8 @@ Since the `input` folder is versioned, every time a PDF document is added, or de
 
 ##### 1. The `input.dvc` File
 
-The actual large PDF files are **not** stored in the Git repository. Instead, the `input.dvc` file is created and committed to Git.  
-This file contains:  
+The actual large PDF files are **not** stored in the Git repository. Instead, the `input.dvc` file is created and committed to Git.
+This file contains:
 * **A pointer** to the location (in this case, the GCP Bucket **f1penaltydocs**) where the actual data files are stored, as defined by the DVC remote configuration.
 * A **hash value (checksum)** of the data currently in `input/`. This checksum acts as the unique identifier for that specific version of the dataset.
 
@@ -283,10 +300,12 @@ The `dvc checkout` command reads the `input.dvc` file associated with that Git c
 
 This process ensures that anyone checking out a specific Git commit will automatically get the exact version of the F1 decision documents used at that time, making  the entire RAG pipeline fully reproducible.
 
+---
 
 ### Frontend
 To-Do
 
+---
 
 #### Model Fine-Tuning
 See [Fine-Tuning README](src/finetuning/README.md) for more details on the fine tuning set up.
