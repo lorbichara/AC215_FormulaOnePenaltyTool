@@ -75,4 +75,4 @@ The primary advantage of storing metadata in the vector database for the embeddi
 
 The file names for the FIA decision documents are too basic (Example: "2024 Abu Dhabi Grand Prix - Infringement xxx.pdf" to provide useful categorical filtering.
 
-So, for now, we're skipping metadata creation in ChromaDB for this milestone. We'll revisit this later. If we find that contextual filtering could really improve our results, we'll certainly implement a way to enrich the embeddings with metadata in the next phase.
+So, we skipped metadata creation in ChromaDB because we did not any evidence that contextual filtering could improve the results.
