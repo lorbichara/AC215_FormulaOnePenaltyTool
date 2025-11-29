@@ -18,42 +18,115 @@ This directory contains the source code for the F1 Penalty Explainer frontend ap
 *   **API Communication**: [Axios](https://axios-http.com/)
 *   **Markdown Rendering**: [React Markdown](https://github.com/remarkjs/react-markdown)
 
+## Project Structure
+
+```
+frontend/frontend-template/
+├── .env.development
+├── .env.production
+├── .gitignore
+├── assets/
+│   ├── docker-compose.png
+│   ├── homepage-dark.png
+│   ├── homepage.png
+│   └── ui-running.png
+├── components.json
+├── docker-shell.sh
+├── Dockerfile
+├── Dockerfile.dev
+├── jsconfig.json
+├── next.config.js
+├── package-lock.json
+├── package.json
+├── postcss.config.js
+├── public/
+│   └── assets/
+│       ├── logo.jpeg
+│       └── logo.svg
+├── README.md
+├── src/
+│   ├── app/
+│   │   ├── analyze/
+│   │   │   └── page.jsx
+│   │   ├── chat/
+│   │   │   └── page.jsx
+│   │   ├── globals.css
+│   │   ├── layout.jsx
+│   │   ├── not-found.jsx
+│   │   └── page.jsx
+│   ├── components/
+│   │   ├── analyze/
+│   │   │   ├── AnalysisResult.jsx
+│   │   │   ├── PenaltyOverviewCard.jsx
+│   │   │   ├── PenaltyUploader.jsx
+│   │   │   └── RegulationViewer.jsx
+│   │   ├── chat/
+│   │   │   ├── ChatHistorySidebar.jsx
+│   │   │   ├── ChatInput.jsx
+│   │   │   ├── ChatMessage.jsx
+│   │   │   └── ChatPage.jsx
+│   │   ├── home/
+│   │   │   ├── FeaturesSection.jsx
+│   │   │   ├── HomePage.jsx
+│   │   │   └── HeroSection.jsx
+│   │   ├── layout/
+│   │   │   ├── Footer.jsx
+│   │   │   ├── Header.jsx
+│   │   │   └── ThemeToggle.jsx
+│   │   └── ui/
+│   │       ├── avatar.jsx
+│   │       ├── badge.jsx
+│   │       ├── button.jsx
+│   │       ├── card.jsx
+│   │       ├── checkbox.jsx
+│   │       ├── dialog.jsx
+│   │       ├── dropdown-menu.jsx
+│   │       ├── input.jsx
+│   │       ├── scroll-area.jsx
+│   │       ├── select.jsx
+│   │       ├── separator.jsx
+│   │       ├── sheet.jsx
+│   │       ├── textarea.jsx
+│   │       ├── toast.jsx
+│   │       └── toaster.jsx
+│   ├── hooks/
+│   │   └── use-toast.js
+│   └── lib/
+│       ├── Common.js
+│       ├── DataService.js
+│       ├── SampleData.js
+│       └── utils.js
+```
+
+
 ## Getting Started
 
-There are two primary ways to run the frontend for development.
+Follow these instructions to set up and run the application.
 
-### Method 1: Using Docker Compose (Recommended)
+### Workflow
 
-This method runs the entire application stack (frontend, backend, database) with a single command.
+*Note: additional automation will be implementated to optimize the workflow*
 
-1.  **Prerequisites**: Docker and Docker Compose are installed.
-2.  **Run the application**: From the project root directory (containing `docker-compose.yml`), run:
-    ```bash
-    docker-compose up --build
-    ```
-3.  **Access the application**: Open your browser and navigate to `http://localhost:3001`.
-
-### Method 2: Manual Container Setup
-
-This method runs only the frontend in a Docker container, assuming the backend services are running separately.
-
-1.  **Navigate to this directory**:
-    ```bash
-    cd src/frontend/frontend-template
-    ```
-2.  **Build and start the container**: This script starts an interactive shell inside the container.
+1.  **Start Backend Services**: From the project root, run the root `docker-shell.sh` to set up the `rag` and `chromadb` containers.
     ```bash
     sh docker-shell.sh
     ```
-3.  **Install dependencies** (inside the container's shell):
+
+2.  **Set up Frontend Container**: In a new terminal, navigate to the `src/frontend/frontend-template` directory and run its `docker-shell.sh`.
     ```bash
-    npm install
+    cd src/frontend/frontend-template
+    sh docker-shell.sh
     ```
-4.  **Run the development server** (inside the container's shell):
+
+3.  **Populate the Database via API**: Open your browser and navigate to the backend's API documentation at `http://localhost:9000/docs`. Use the interface to run the `/store` endpoints in that order. This is a one-time setup step.
+
+4.  **Start Full Application with Docker Compose**: Go back to the project root directory and run `docker-compose up`.
     ```bash
-    npm run dev
+    docker-compose up
     ```
-5.  **Access the application**: Open your browser and navigate to `http://localhost:3001`.
+
+5.  **Access the Application**: Open your browser and navigate to `http://localhost:3001`to access the UI.
+
 
 ## Evidence of Running Components
 

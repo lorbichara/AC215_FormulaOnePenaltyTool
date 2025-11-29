@@ -303,7 +303,7 @@ This process ensures that anyone checking out a specific Git commit will automat
 ---
 
 ### Frontend
-See [Frontend README](src/frontend/frontend-template/README.md) for more details on the fine tuning set up.
+See [Frontend README](src/frontend/frontend-template/README.md) for more details on the frontend set up.
 
 ---
 
