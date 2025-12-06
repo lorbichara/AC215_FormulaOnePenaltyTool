@@ -26,9 +26,8 @@ GCP_BUCKET = os.environ["GCP_BUCKET"]
 GCP_LOCATION = "us-central1"
 
 # Data related parameters
+ROOT_DIR = os.environ["ROOT_DIR"]
 DATASET_DIR = os.environ["DATASET_DIR"]
-DECISIONS_DATA_DIR = DATASET_DIR + "/decisions"
-REGULATIONS_DATA_DIR = DATASET_DIR + "/regulations"
 
 JSON_OUTPUT_DIR = os.environ["OUTPUT_DIR"]
 DECISION_JSON_DIR = JSON_OUTPUT_DIR + "/decision_jsons"
@@ -47,18 +46,24 @@ REGULATIONS_COLLECTION = "ac215-f1-regulations_collection"
 EMBEDDING_MODEL = "text-embedding-004"
 EMBED_DIM = 256
 
-# LLM_MODEL = "gemini-2.5-flash"
-LLM_MODEL = os.environ["LLM_MODEL"]
-
 DBG_LVL_HIGH = 2
 DBG_LVL_MED = 1
 DBG_LVL_LOW = 0
-global_debug_level = DBG_LVL_MED
+global_debug_level = DBG_LVL_LOW
 
 
 def DEBUG(level, input_string):
     if level >= global_debug_level:
         print(input_string)
+
+
+PARAM_GOOGLE_LLM = "gemini-default"
+PARAM_FINE_TUNED = "gemini-finetuned"
+
+LLM_MODELS = {
+    PARAM_GOOGLE_LLM: "gemini-2.5-flash",
+    PARAM_FINE_TUNED: "projects/ac215-f1penaltytool/locations/us-central1/endpoints/547845962190553088",
+}
 
 
 # Error codes for chunking process
@@ -83,16 +88,48 @@ def is_file_interesting(file_name):
     return False
 
 
+def remove_file(filepath):
+    try:
+        os.remove(filepath)
+    except PermissionError:
+        print(f"Permission denied: '{filepath}'. Check file permissions or lsof.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+
 def chunk_file(filepath, filename, json_folder, counter):
-    DEBUG(DBG_LVL_LOW, "Ffile: %s, count-%d" % (filepath, counter))
-    DEBUG(DBG_LVL_LOW, "filename: %s" % (filename))
+    DEBUG(DBG_LVL_LOW, "\nCOUNT: %d, FILE: %s" % (counter, filepath))
+    # DEBUG(DBG_LVL_LOW, "filename: %s" % (filename))
 
-    json_file = f"embeddings-{filename}.jsonl"
-    embeddings_jsonl = os.path.join(json_folder, json_file)
-    DEBUG(DBG_LVL_LOW, "Check file exists? " + str(embeddings_jsonl))
+    chunk_jsonl = os.path.join(json_folder, f"chunks-{filename}.jsonl")
+    chunk_exists = os.path.isfile(chunk_jsonl)
+    # print("Chunk file: %s, Exist? %d" %(chunk_jsonl, chunk_exists))
 
-    if os.path.isfile(embeddings_jsonl):  # File already processed
+    embed_jsonl = os.path.join(json_folder, f"embeddings-{filename}.jsonl")
+    embed_exists = os.path.isfile(embed_jsonl)
+    # print("Embed file: %s, Exist? %d" %(embed_jsonl, chunk_exists))
+
+    # Chunk_file  Embed_file  Comments
+    #   Not exist  Exist       Invalid scenario
+    #   Exists     Not exist   There is no guarantee that chunk file is valid.
+    #   Exists     Exists      Chunk file must have been valid
+
+    DEBUG(
+        DBG_LVL_LOW,
+        "FILE: %s, Chunked? %d Embedded? %d" % (filepath, chunk_exists, embed_exists),
+    )
+    if chunk_exists and embed_exists:  # File was already chunked and embedded
         return ERROR_CODE_ALREADY_CHUNKED
+    else:
+        if chunk_exists:  # Delete the file and recreate it
+            DEBUG(DBG_LVL_LOW, "Deleting: %s" % (filepath))
+            # remove_file(filepath)
+            return ERROR_CODE_SUCCESS
+        if embed_exists:
+            assert True, "Invalid scenario"
+
+    DEBUG(DBG_LVL_LOW, "CHUNKING: %s, FILE COUNT-%d" % (filepath, counter))
+    return ERROR_CODE_SUCCESS
 
     input_text = ""
     try:
@@ -110,7 +147,7 @@ def chunk_file(filepath, filename, json_folder, counter):
 
     # Perform the splitting
     text_chunks = None
-    text_chunks = text_splitter.create_documents([input_text])
+    text_chunks = text_splitter.create_documents([input_text.lower()])
     text_chunks = [doc.page_content for doc in text_chunks]
     # print("Number of chunks:", len(text_chunks))
     assert len(text_chunks)
@@ -120,7 +157,6 @@ def chunk_file(filepath, filename, json_folder, counter):
     data_df["file"] = filename
 
     jsonl_filename = os.path.join(json_folder, f"chunks-{filename}.jsonl")
-
     DEBUG(DBG_LVL_LOW, "Writing chunks to: " + jsonl_filename)
     with open(jsonl_filename, "w") as json_file:
         json_file.write(data_df.to_json(orient="records", lines=True))
@@ -167,19 +203,22 @@ def chunk(tag, json_folder, limit):
                         # print(f"    -> Not interesting: {blob.name}")
                         continue
 
-                    DEBUG(DBG_LVL_LOW, f"gs://{GCP_BUCKET}/{blob.name}")
+                    # DEBUG(DBG_LVL_LOW, f"gs://{GCP_BUCKET}/{blob.name}")
                     considering_counter += 1
 
                     filename = os.path.basename(blob.name)
                     filename = os.path.splitext(filename)[0]
+
+                    filepath = ROOT_DIR + "/" + blob.name
+
                     ret_val = chunk_file(
-                        blob.name, filename, json_folder, considering_counter
+                        filepath, filename, json_folder, considering_counter
                     )
                     if ret_val == ERROR_CODE_SUCCESS:
-                        DEBUG(DBG_LVL_LOW, f"->CHUNKED: {filename}")
+                        DEBUG(DBG_LVL_LOW, f"->CHUNKED: {filepath}")
                         files_chunked_now += 1
                     elif ret_val == ERROR_CODE_FILE_CORRUPTED:
-                        DEBUG(DBG_LVL_HIGH, f"->CORRUPTED: {filename}")
+                        DEBUG(DBG_LVL_HIGH, f"->CORRUPTED: {filepath}")
                         files_failed += 1
                     elif ret_val == ERROR_CODE_ALREADY_CHUNKED:
                         # ALREADY CHUNKED
@@ -272,7 +311,6 @@ def embed(json_folder, limit):
             break
 
         embedded_now += 1
-
         with open(jsonl_filename, "w") as json_file:
             json_file.write(data_df.to_json(orient="records", lines=True))
 
@@ -401,7 +439,7 @@ def store_embeddings(testing=False):
 # ==============================================================================
 #                             QUERY THE RAG SYSTEM
 # ==============================================================================
-def query(user_query):
+def query(user_query, llm_choice: str = PARAM_GOOGLE_LLM):
     ret_val = ERROR_CODE_SUCCESS
 
     # STEP-1: Instantiate a pretrained model.
@@ -413,6 +451,7 @@ def query(user_query):
     # STEP-3: Create embeddings for the user query.
     DEBUG(DBG_LVL_HIGH, "Query: %s" % user_query)
 
+    user_query = user_query.lower()
     try:
         embeddings = model.get_embeddings([user_query], output_dimensionality=EMBED_DIM)
     except Exception as e:
@@ -421,9 +460,9 @@ def query(user_query):
         return ret_str, ERROR_CODE_GCS_FAILURE
 
     query_embedding = embeddings[0].values
-    DEBUG(DBG_LVL_LOW, "Query embeddings: " + str(query_embedding))
+    DEBUG(DBG_LVL_MED, "Query embeddings: " + str(query_embedding))
 
-    # STEP-4: Retrieve relevant regulations.
+    # STEP-4: Retrieve similar past decisions.
     try:
         dec_collection = client.get_collection(name=DECISIONS_COLLECTION)
     except Exception:
@@ -433,10 +472,11 @@ def query(user_query):
 
     results_decision = dec_collection.query(
         query_embeddings=[query_embedding],
-        n_results=2,
+        include=["documents", "distances"],
+        n_results=5,
     )
 
-    # STEP-5: Retrieve similar past decisions.
+    # STEP-5: Retrieve relevant regulations.
     try:
         reg_collection = client.get_collection(name=REGULATIONS_COLLECTION)
     except Exception:
@@ -455,10 +495,13 @@ def query(user_query):
     {user_query}
 
     Relevant FIA Sporting Regulations:
-    {results_decision}
+    {results_regulation}
 
     Relevant historical decisions for comparison:
-    {results_regulation}
+    {results_decision}
+
+    Perform symantic similarity of the user query against results_decisions and results_regulations and perform the following tasks.
+    Convert text into lowercase if it provides better accuracy.
 
     TASKS:
     1. Provide a clear explanation of the infringement and what the regulation
@@ -473,10 +516,17 @@ def query(user_query):
     If the answer is not in the context, say you cannot answer based on the
     information provided.
     """
+    DEBUG(DBG_LVL_MED, prompt_template)
 
     # STEP-7: Send context and query to target LLM.
-    llm_model = GenerativeModel(LLM_MODEL)
+    DEBUG(DBG_LVL_HIGH, "llm_choice: " + str(llm_choice))
+    selected_llm = str(LLM_MODELS[llm_choice])
+    DEBUG(DBG_LVL_HIGH, "Selected LLM: " + selected_llm)
+
+    llm_model = GenerativeModel(selected_llm)
     DEBUG(DBG_LVL_HIGH, "\nSending prompt to the LLM...")
+
+    DEBUG(DBG_LVL_MED, "\n\nLLM RESPONSE")
     answer = ""
     try:
         response = llm_model.generate_content(prompt_template)
