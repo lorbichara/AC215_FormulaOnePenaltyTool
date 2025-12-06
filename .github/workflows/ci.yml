@@ -29,6 +29,7 @@ jobs:
       - name: Build Docker image
         run: |
           docker build -t rag-img .
+          docker build -t f1-frontend .
 
       - name: Start container in background
         run: |
@@ -61,8 +62,8 @@ jobs:
       - name: Stop container
         if: always()
         run: |
-          docker stop rag
-          docker rm rag
+          docker stop rag || true
+          docker rm rag || true
 
   # Job 2: Summary
   test-summary:

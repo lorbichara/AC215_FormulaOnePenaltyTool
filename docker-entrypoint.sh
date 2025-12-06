@@ -12,9 +12,10 @@ echo 'GCP bucket mounted at /mnt/gcs_data'
 
 mkdir -p /app/output
 mount --bind /mnt/gcs_data/output   /app/output
+mount --bind /mnt/gcs_data/output2   /app/output2
 
-mkdir -p /app/input
-mount --bind /mnt/gcs_data/raw_pdfs /app/input
+mkdir -p /app/raw_pdfs
+mount --bind /mnt/gcs_data/raw_pdfs /app/raw_pdfs
 
 # Activate virtual environment
 echo "Activating virtual environment..."

@@ -74,4 +74,4 @@ class TestAPIEndpoints:
             f"{API_BASE_URL}/query?prompt=Is the Car 30 infringement in 2024 Abu Dhabi Grand Prix a fair penalty"
         )
         assert response.status_code == 200
-        assert response.headers["Content-Type"] == "text/html; charset=utf-8"
+        assert response.headers["Content-Type"] == "application/json"
