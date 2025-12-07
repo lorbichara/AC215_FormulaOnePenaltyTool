@@ -58,8 +58,15 @@ COPY --chown=app:app pyproject.toml uv.lock* ./
 RUN uv sync
 #RUN uv sync --frozen
 
+# Copy the entrypoint script and make it executable
+COPY --chown=app:app docker-entrypoint.sh ./
+RUN chmod +x ./docker-entrypoint.sh
+
 # Copy the rest of the source code
 COPY --chown=app:app . ./
+
+# Make sure the entrypoint script is executable (again for safety)
+RUN chmod +x ./docker-entrypoint.sh
 
 # Entry point
 #ENTRYPOINT ["pipenv","shell"]

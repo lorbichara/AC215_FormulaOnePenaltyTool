@@ -4,14 +4,15 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.middleware.cors import CORSMiddleware
 
-import rag as rag
+# Import rag module functions
+import rag
 
 
 PARAM_GOOGLE_LLM = "gemini-default"
 PARAM_FINE_TUNED = "gemini-finetuned"
 
 
-UVICORN_PORT = os.environ["UVICORN_PORT"]
+UVICORN_PORT = os.environ.get("UVICORN_PORT", "9000")
 
 # Setup FastAPI app
 app = FastAPI(title="API Server", description="API Server", version="v1")
