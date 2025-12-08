@@ -7,6 +7,7 @@ services:
             - 9000:9000
         volumes:
             - .:/app
+            - ../secrets:/app/secrets
         devices:
             - "/dev/fuse:/dev/fuse"
         environment:

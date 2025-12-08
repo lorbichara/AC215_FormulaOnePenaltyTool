@@ -122,28 +122,33 @@ def chunk_file(filepath, filename, json_folder, counter):
         return ERROR_CODE_ALREADY_CHUNKED
     else:
         if chunk_exists:  # Delete the file and recreate it
-            DEBUG(DBG_LVL_LOW, "Deleting: %s" % (filepath))
-            # remove_file(filepath)
+            DEBUG(DBG_LVL_LOW, "Deleting: %s" % (chunk_jsonl))
+            # remove_file(chunk_jsonl)
             return ERROR_CODE_SUCCESS
         if embed_exists:
             assert True, "Invalid scenario"
 
     DEBUG(DBG_LVL_LOW, "CHUNKING: %s, FILE COUNT-%d" % (filepath, counter))
-    return ERROR_CODE_SUCCESS
 
     input_text = ""
+    import copy
     try:
         pdf_reader = PdfReader(filepath)
         for page in pdf_reader.pages:
             page_text = page.extract_text()
             if page_text:
-                input_text += page_text.replace("\n", " ") + " "
+                page_text = page_text.replace("\n", " ") + " "
+                page_text = page_text.replace('\u00a0', ' ')
+                input_text += page_text
     except Exception as e:
         DEBUG(DBG_LVL_MED, f"Error processing {filepath}: {e}")
         return ERROR_CODE_FILE_CORRUPTED
 
     # Init the splitter
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE,
+                                                   chunk_overlap=20,
+                                                   separators=["\n\n", "\n", " ", ""]
+                                                   )
 
     # Perform the splitting
     text_chunks = None
@@ -237,7 +242,7 @@ def chunk(tag, json_folder, limit):
 
 
 def create_chunks(limit=sys.maxsize):
-    DEBUG(DBG_LVL_LOW, "CHUNK LIMIT: " + str(limit))
+    DEBUG(DBG_LVL_LOW, "MAX NUMBER OF FILES: " + str(limit))
     ret_str, ret_val = chunk("decisions", DECISION_JSON_DIR, int(limit))
     ret_str_1 = "\nChunking for decision files done. \n" + ret_str + "\n"
     if ret_val == ERROR_CODE_GCS_FAILURE:
@@ -473,7 +478,7 @@ def query(user_query, llm_choice: str = PARAM_GOOGLE_LLM):
     results_decision = dec_collection.query(
         query_embeddings=[query_embedding],
         include=["documents", "distances"],
-        n_results=5,
+        n_results=10,
     )
 
     # STEP-5: Retrieve relevant regulations.
