@@ -13,7 +13,7 @@ services:
         environment:
             ROOT_DIR: "/app"
             DATASET_DIR: "/app/raw_pdfs"
-            OUTPUT_DIR: "/app/output2"
+            OUTPUT_DIR: "/app/output"
             GOOGLE_APPLICATION_CREDENTIALS: "/app/secrets/ac215-f1penaltytool.json"
             GCP_PROJECT: "ac215-f1penaltytool"
             GCP_BUCKET: "f1penaltydocs"

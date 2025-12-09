@@ -8,5 +8,15 @@ src/rag/output
 /input
 /output
 
+chunk_processed.csv
+chunk_skipped.csv
+embed_deci_stored.csv
+embed_regul_stored.csv
+
+src/rag/chunk_processed.csv
+src/rag/chunk_skipped.csv
+src/rag/embed_deci_stored.csv
+src/rag/embed_regul_stored.csv
+
 # all pycache files
 **/__pycache__/

@@ -39,4 +39,9 @@ dependencies = [
     "pytest>=7.4.4",
     "python-multipart>=0.0.7",
     "requests>=2.31.0",
+    "pycountry",
+    "spacy",
+    "country_converter",
+    "countryinfo",
+    "pip>=25.3",
 ]

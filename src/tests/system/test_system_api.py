@@ -61,10 +61,10 @@ class TestAPIEndpoints:
         assert response.status_code == 200
         assert response.headers["Content-Type"] == "text/html; charset=utf-8"
         assert (
-            "Storing of embeddings of decision files in chromadb done" in response.text
+            "Storing of embeddings of decision files in Chromadb done" in response.text
         )
         assert (
-            "Storing of embeddings of regulation files in chromadb done"
+            "Storing of embeddings of regulation files in Chromadb done"
             in response.text
         )
 

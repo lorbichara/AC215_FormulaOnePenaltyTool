@@ -1,4 +1,5 @@
 import os
+import sys
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -42,7 +43,7 @@ async def health_check():
 
 
 @app.get("/chunk/")
-async def create_chunks(limit: int):
+async def create_chunks(limit: int = sys.maxsize):
     ret_str, ret_val = rag.create_chunks(limit)
     html_content = f"""
         {ret_str}

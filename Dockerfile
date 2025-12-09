@@ -20,6 +20,10 @@ ENV PYTHONUNBUFFERED=1
 ENV UV_LINK_MODE=copy
 ENV UV_PROJECT_ENVIRONMENT=/.venv
 
+# Activate the virtual environment
+ENV VIRTUAL_ENV=/.venv
+#ENV PATH="/.venv/bin:$PATH"
+
 RUN set -ex; \
     for i in $(seq 1 8); do mkdir -p "/usr/share/man/man${i}"; done && \
     apt-get update && \
@@ -32,6 +36,7 @@ RUN set -ex; \
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add - && \
     echo "deb http://packages.cloud.google.com/apt gcsfuse-bionic main" > /etc/apt/sources.list.d/gcsfuse.list && \ 
     apt-get update && \
+    apt-get install -y python3-pip && \
     apt-get install -y  gcsfuse && \
     apt-get install -y --no-install-recommends google-cloud-sdk && \
     apt-get install -y libnss3 libcurl4 && \
@@ -39,11 +44,13 @@ RUN set -ex; \
     rm -rf /var/lib/apt/lists/* && \
     pip install --no-cache-dir --upgrade pip && \
     pip install uv && \
+    pip install spacy && \
     useradd -ms /bin/bash app -d /home/app -u 1000 && \
     mkdir -p /app && \
     chown app:app /app && \
     mkdir -p /.venv && \
     chown app:app /.venv
+
 
 RUN mkdir -p /mnt/gcs_data && chown app:app /mnt/gcs_data
 
@@ -55,12 +62,17 @@ WORKDIR /app
 COPY --chown=app:app pyproject.toml uv.lock* ./
 
 # Install dependencies in a separate layer for better caching
-RUN uv sync
-#RUN uv sync --frozen
+#RUN uv sync
+RUN uv sync --frozen
+
+RUN uv add pip
+RUN uv run -- spacy download en_core_web_sm
 
 # Copy the rest of the source code
 COPY --chown=app:app . ./
 
 # Entry point
+#CMD ["/.venv/bin/python", "-m spacy download en_core_web_sm"]
+
 #ENTRYPOINT ["pipenv","shell"]
 ENTRYPOINT ["/bin/bash","./docker-entrypoint.sh"]

@@ -1,11 +1,19 @@
 import os
+import re
 import sys
-import argparse
-import pandas as pd
 import glob
-import hashlib
+import json
+import argparse
 from pypdf import PdfReader
 
+import pandas as pd
+
+import spacy
+from spacy.matcher import Matcher
+from spacy.cli import download
+
+import country_converter
+from countryinfo import CountryInfo
 
 # Langchain
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -33,11 +41,13 @@ JSON_OUTPUT_DIR = os.environ["OUTPUT_DIR"]
 DECISION_JSON_DIR = JSON_OUTPUT_DIR + "/decision_jsons"
 REGULATION_JSON_DIR = JSON_OUTPUT_DIR + "/regulation_jsons"
 
+BATCH_SIZE = 250
+
 # ChromaDB related parameters
 
 CHROMADB_HOST = os.environ["CHROMADB_HOST"]
 CHROMADB_PORT = os.environ["CHROMADB_PORT"]
-CHUNK_SIZE = 350
+CHUNK_SIZE = 250
 
 DECISIONS_COLLECTION = "ac215-f1-decisions_collection"
 REGULATIONS_COLLECTION = "ac215-f1-regulations_collection"
@@ -49,7 +59,7 @@ EMBED_DIM = 256
 DBG_LVL_HIGH = 2
 DBG_LVL_MED = 1
 DBG_LVL_LOW = 0
-global_debug_level = DBG_LVL_LOW
+global_debug_level = DBG_LVL_MED
 
 
 def DEBUG(level, input_string):
@@ -65,16 +75,342 @@ LLM_MODELS = {
     PARAM_FINE_TUNED: "projects/ac215-f1penaltytool/locations/us-central1/endpoints/547845962190553088",
 }
 
-
 # Error codes for chunking process
 ERROR_CODE_SUCCESS = 0
 ERROR_CODE_GCS_FAILURE = 1
-ERROR_CODE_FILE_CORRUPTED = 2
-ERROR_CODE_ALREADY_CHUNKED = 3
-ERROR_CODE_CHROMADB_FAILED = 4
+ERROR_CODE_FILE_SKIPPED = 2
+ERROR_CODE_FILE_CORRUPTED = 3
+ERROR_CODE_ALREADY_CHUNKED = 4
+ERROR_CODE_CHROMADB_FAILED = 5
+ERROR_CODE_SPACY_FAILED = 6
 
 HTTP_CODE_GENERIC_SUCCESS = 200
 HTTP_CODE_GENERIC_FAILURE = 400
+
+nlp = None
+locations_list = None
+country_adjectives_map = None
+
+CHUNK_SKIPPED_LIST_FILE = "chunk_skipped.csv"
+CHUNK_PROCESSED_LIST_FILE = "chunk_processed.csv"
+CHUNK_CORRUPTED_LIST_FILE = "chunk_corrupted.csv"
+EMBED_DECISION_STORE_LIST_FILE = "embed_deci_stored.csv"
+EMBED_REGULATION_STORE_LIST_FILE = "embed_regul_stored.csv"
+
+chunk_skipped_file = os.path.join("./", CHUNK_SKIPPED_LIST_FILE)
+chunk_processed_file = os.path.join("./", CHUNK_PROCESSED_LIST_FILE)
+chunk_corrupted_file = os.path.join("./", CHUNK_CORRUPTED_LIST_FILE)
+embed_deci_store_list_file = os.path.join("./", EMBED_DECISION_STORE_LIST_FILE)
+embed_regul_store_list_file = os.path.join("./", EMBED_REGULATION_STORE_LIST_FILE)
+
+chunk_processed_set = set()
+chunk_processed_set_orig = set()
+
+chunk_corrupted_set = set()
+chunk_corrupted_set_orig = set()
+
+chunk_skipped_set = set()
+chunk_skipped_set_orig = set()
+
+
+# =============================================================================
+#                                UTILITY FUNCTIONS
+# =============================================================================
+def remove_file(filepath):
+    try:
+        os.remove(filepath)
+    except PermissionError:
+        print(f"Permission denied: '{filepath}'. Check file permissions or lsof.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+
+def get_country_adjectives_map():
+    # 1. Generate the exhaustive ADJ_TO_COUNTRY_MAP using country-converter
+    country_map = {}
+    cc = country_converter.CountryConverter()
+
+    # Get a list of all standardized country names that cc can recognize
+    # We use 'official_name' for robustness, but 'name_short' is also common.
+    all_country_names = cc.data["name_short"].tolist()
+
+    for country_name in all_country_names:
+        # Get the official country name (which we want to extract)
+        official_name = cc.convert(names=country_name, to="name_short")
+
+        try:
+            # Get the nationality/demonym (the adjective form)
+            # demonyms = cc.convert(names=country_name, to='demonym', not_found=None)
+            country = CountryInfo(country_name)
+            demonyms = country.demonym()
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+            continue
+
+        # The output might be a single string or a list (for countries with multiple)
+        if isinstance(demonyms, str) and demonyms is not None:
+            # Convert the demonym (adjective) to lowercase for reliable matching
+            country_map[demonyms.lower()] = official_name.lower()
+        elif isinstance(demonyms, list):
+            # Handle the few cases where the demonym is returned as a list
+            for demonym in demonyms:
+                if demonym is not None:
+                    country_map[demonym.lower()] = official_name.lower()
+
+    # Add critical multi-word demonyms that might be missed or are common exceptions
+    # (e.g., separating the word 'American' which often corresponds to 'United States')
+    # country_map["abu dhabi"] = "Abu Dhabi".lower()
+    country_map["dhabi"] = "Abu Dhabi".lower()
+    country_map["american"] = "United States".lower()
+    # country_map["british"] = "United Kingdom".lower()
+    # country_map["saudi arabia"] = "Saudi Arabia".lower()
+    country_map["saudi"] = "Saudi Arabia".lower()
+    country_map["mexico"] = "Mexico".lower()
+
+    # City to country mapping.
+    country_map["emilia"] = "Italy".lower()
+    country_map["eifel"] = "Germany".lower()
+    country_map["sakhir"] = "Bahrain".lower()
+
+    return country_map
+
+
+def create_country_params():
+    global locations_list
+    global country_adjectives_map
+
+    # Create a list of known country names from country_converter package.
+    country_conv = country_converter.CountryConverter()
+
+    locations_list = set(country_conv.data["name_short"].str.lower())
+    locations_list.add("United Kingdom")
+    locations_list.add("Abu Dhabi")
+    locations_list.add("Saudi Arabia")
+    locations_list = set(map(str.lower, locations_list))
+
+    # Generate a dictionary of adjectives and their corresponding
+    # country names from the pycountry data.
+    country_adjectives_map = get_country_adjectives_map()
+
+    # NOTE: The following adjectives are missing in the pycountry data.
+    country_adjectives_map["turkish"] = "Türkiye".lower()
+    country_adjectives_map["british"] = "United Kingdom".lower()
+    country_adjectives_map["styrian"] = "Austria".lower()
+
+
+def extract_countries_using_demonyms(text):
+
+    extracted_locations = set()
+
+    try:
+        # doc = nlp(text)
+        doc = nlp(text.lower())
+    except OSError as e:
+        print(f"Error loading spaCy model: {e}")
+        return list(extracted_locations)
+    except ValueError as e:
+        print(f"Error during NLP processing: {e}")
+        return list(extracted_locations)
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        return list(extracted_locations)
+
+    # 1. Extract explicit GPEs (Cities, Countries, etc.)
+    for ent in doc.ents:
+        # print("TOKEN-1: " + str(ent))
+        if ent.label_ == "gpe":
+            extracted_locations.add(ent.text.title())
+
+    # 2. Extract Countries from Adjective Modifiers
+    for token in doc:
+        # print("TOKEN-2: %s, token.pos_: %s, token.dep_: %s" %(str(token.text), str(token.pos_), str(token.dep_)))
+
+        # Check if the token is an adjective
+        # Use the token's text to look up the country in our map
+        if token.text in country_adjectives_map:
+            head_token = token.head
+            # print("head_token: %s, head_token.pos_: %s" %(str(head_token.text), str(head_token.pos_)))
+
+            # Check if the adjective is modifying a noun or proper noun
+            # (dependency tag 'amod', aka, adjective modifier)
+            if token.pos_ == "ADJ":
+                # Use the token's text to look up the country in our map
+                if token.text in country_adjectives_map:
+                    head_token = token.head
+
+                    # Check if the adjective is modifying a noun or proper noun
+                    # (dependency tag 'amod', aka, adjective modifier)
+                    if token.dep_ == "amod" and head_token.pos_ in ["NOUN", "PROPN"]:
+                        country_name = country_adjectives_map[token.text]
+                        extracted_locations.add(country_name)
+            elif token.pos_ == "PROPN" or token.pos_ == "NOUN" or token.pos_ == "X":
+                # NOTE: For some reason, Spacy is tagging "Eifel as Unknown Part of speech"
+                if token.text in country_adjectives_map:
+                    country_name = country_adjectives_map[token.text]
+                    extracted_locations.add(country_name)
+
+    return list(extracted_locations)
+
+
+# Rule-Based Matching with spaCy's Matcher
+def extract_domain_entities(text):
+
+    extracted_entities = set()
+
+    try:
+        # doc = nlp(text)
+        doc = nlp(text.lower())
+    except OSError as e:
+        print(f"Error loading spaCy model: {e}")
+        return list(extracted_entities)
+    except ValueError as e:
+        print(f"Error during NLP processing: {e}")
+        return list(extracted_entities)
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        return list(extracted_entities)
+
+    # Initialize the Matcher with the shared vocabulary
+    matcher = Matcher(nlp.vocab)
+
+    location_pattern = {"IS_STOP": False, "OP": "+"}
+    # location_pos_tags = ["PROPN", "ADJ", "NOUN"]
+
+    # --- 1. Pattern to capture Grand Prix Location/Event ---
+    # Pattern: [City/Country] [Grand] [Prix]
+    # Look for a token that is a Proper Noun (PROPN), followed by "Grand" and "Prix".
+    pattern_gp = [
+        # {"POS": "PROPN", "OP": "+"},  # One or more Proper Nouns (e.g., 'Singapore')
+        # {"POS": {"IN": location_pos_tags}, "OP": "+"},  # One or more PROPNs OR ADJs
+        location_pattern,
+        {"LOWER": "grand"},  # Followed by the literal word "grand"
+        {"LOWER": "prix"},  # Followed by the literal word "prix"
+    ]
+
+    pattern_gp_abbr = [
+        # {"POS": {"IN": ["PROPN", "NOUN"]}, "OP": "+"},
+        # {"POS": {"IN": location_pos_tags}, "OP": "+"},
+        location_pattern,
+        {"LOWER": "gp"},
+    ]
+
+    matcher.add("LOCATION", [pattern_gp, pattern_gp_abbr])
+
+    matches = matcher(doc)
+
+    for match_id, start, end in matches:
+        span = doc[start:end]
+
+        location_tokens = []
+        for token in span:
+            if token.lower_ in ["grand", "gp"]:
+                break  # Stop when we hit the start of 'Grand Prix'
+            location_tokens.append(token.text)
+
+        location_name = " ".join(location_tokens)
+        if location_name:
+            extracted_entities.add(location_name)
+
+    return list(extracted_entities)
+
+
+def extract_place_from_text(text):
+
+    demonym_list = extract_countries_using_demonyms(text)
+    extracted_locations = set(demonym_list)
+    # print("demonym_list: " + str(demonym_list))
+
+    if not len(extracted_locations):
+        domain_entity_list = extract_domain_entities(text)
+        extracted_locations.update(domain_entity_list)
+        # print("domain_entity_list: " + str(extracted_locations))
+
+    if len(extracted_locations) == 1:
+        return list(extracted_locations)[0]
+    else:
+        for loc in extracted_locations:
+            if loc.lower() in locations_list:
+                return loc
+
+        # If none of the identified locations are recognized countries, just
+        # return the first available entry.
+        if len(domain_entity_list) > 1:
+            # If not found in country list, just return the series of Adjectives.
+            sorted_domain_list = sorted(
+                domain_entity_list, key=lambda x: len(x.split()), reverse=False
+            )
+            return sorted_domain_list[0]
+
+    return None
+
+
+def extract_car_num_from_txt(text: str) -> str or None:
+    # Pattern to find 'Car'
+    # E.g., Car 30, Car. 44, Car No. 6, C-30
+    patterns = [
+        r"[Cc]ar\s+N?o?\.?\s*\n*\d*",
+        # r'[Cc]ar[s]*\s\d*\s*,*\d*\s*\s*and\s*\d*',
+        r"[Cc]ar[s]+\s[\d,]+\s*and\s*\d+",
+    ]
+
+    digits_only = []
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            new_str = match.group(0)
+
+            found = re.findall(r"\d+", new_str)
+            digits_only.extend(found)
+        else:
+            pass
+
+    return digits_only
+
+
+def parse_metadata_from_text(text) -> dict:
+    """
+    Parses the FIA document filename to extract structured metadata.
+    Returns: dict{year, location, car}.
+    """
+
+    DEBUG(DBG_LVL_LOW, "TEXT: " + text)
+
+    metadata = {}
+
+    # 1. Set document type
+    metadata["doc_type"] = "decision"
+    if "regulations" in text.lower():
+        metadata["doc_type"] = "regulation"
+        return metadata
+
+    DEBUG(DBG_LVL_LOW, "Extracting Year")
+    # 2. Extract Year
+    # year_match = re.match(r'(\d{4})', text)
+    year_match = re.search(r"\b\d{4}\b", text)
+    if year_match:
+        metadata["year"] = year_match.group(0)
+        DEBUG(DBG_LVL_LOW, "year: " + str(year_match.group(0)))
+
+    DEBUG(DBG_LVL_LOW, "Extracting location")
+    # 3. Extract location (Country, City, etc) from file name.
+    location = extract_place_from_text(text)
+    if location is not None:
+        metadata["location"] = location
+        DEBUG(DBG_LVL_LOW, "Location: " + location)
+
+    DEBUG(DBG_LVL_LOW, "Extracting Car number")
+    # 4. Extract Car Number(s) from filename
+    all_involved_cars = extract_car_num_from_txt(text)
+    DEBUG(DBG_LVL_LOW, "all_involved_cars: " + str(all_involved_cars))
+
+    if all_involved_cars:
+        # 4.1. Use the first car found as the primary filter target
+        metadata["car_num"] = all_involved_cars[0]
+
+        # 4.2. Store ALL involved cars as a comma-separated string for RAG context.
+        metadata["all_involved_cars"] = ", ".join(all_involved_cars)
+
+    return metadata
 
 
 # =============================================================================
@@ -88,17 +424,44 @@ def is_file_interesting(file_name):
     return False
 
 
-def remove_file(filepath):
-    try:
-        os.remove(filepath)
-    except PermissionError:
-        print(f"Permission denied: '{filepath}'. Check file permissions or lsof.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
+def find_markers(input_text):
+    markers = [
+        "No / Driver",
+        "Competitor",
+        "Time",
+        "Session",
+        "Fact",
+        "Infringement",
+        "Offence",
+        "Decision",
+        "Reason",
+    ]
+    marker_pattern = "|".join(re.escape(m) for m in markers)
+
+    # The main regex pattern:
+    # (marker_pattern)   -> Capture Group 1: Matches and captures one of the defined markers.
+    # \s* -> Matches zero or more whitespace characters (spaces, tabs, newlines).
+    # (.*?)              -> Capture Group 2: Matches and captures the content (non-greedily).
+    # (?=marker_pattern|$) -> Positive Lookahead: Looks ahead for the next marker OR the end of the string ($).
+    #                         This tells the non-greedy content capture (.*?) where to stop.
+    regex = rf"({marker_pattern})\s*(.*?)(?={marker_pattern}|$)"
+
+    # Find all matches
+    # re.DOTALL ensures that '.' matches newlines, allowing content to span multiple lines.
+    matches = re.findall(regex, input_text, re.DOTALL)
+
+    # Format results into a dictionary
+    results = {}
+    for marker, content in matches:
+        # Clean up any leading/trailing whitespace from the content before storing
+        results[marker.strip()] = content.strip()
+
+    return results
 
 
-def chunk_file(filepath, filename, json_folder, counter):
-    DEBUG(DBG_LVL_LOW, "\nCOUNT: %d, FILE: %s" % (counter, filepath))
+def chunk_file(filepath, filename, json_folder, counter, metadata):
+
+    DEBUG(DBG_LVL_MED, "\nCOUNT: %d, FILE: %s" % (counter, filepath))
     # DEBUG(DBG_LVL_LOW, "filename: %s" % (filename))
 
     chunk_jsonl = os.path.join(json_folder, f"chunks-{filename}.jsonl")
@@ -122,156 +485,301 @@ def chunk_file(filepath, filename, json_folder, counter):
         return ERROR_CODE_ALREADY_CHUNKED
     else:
         if chunk_exists:  # Delete the file and recreate it
-            DEBUG(DBG_LVL_LOW, "Deleting: %s" % (chunk_jsonl))
+            # DEBUG(DBG_LVL_LOW, "Deleting: %s" % (chunk_jsonl))
             # remove_file(chunk_jsonl)
             return ERROR_CODE_SUCCESS
         if embed_exists:
             assert True, "Invalid scenario"
 
-    DEBUG(DBG_LVL_LOW, "CHUNKING: %s, FILE COUNT-%d" % (filepath, counter))
-
     input_text = ""
-    import copy
     try:
         pdf_reader = PdfReader(filepath)
         for page in pdf_reader.pages:
             page_text = page.extract_text()
             if page_text:
                 page_text = page_text.replace("\n", " ") + " "
-                page_text = page_text.replace('\u00a0', ' ')
+                page_text = page_text.replace("\u00a0", " ")
+                page_text = page_text.replace("\u2013", " ")
+
                 input_text += page_text
     except Exception as e:
         DEBUG(DBG_LVL_MED, f"Error processing {filepath}: {e}")
         return ERROR_CODE_FILE_CORRUPTED
 
-    # Init the splitter
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE,
-                                                   chunk_overlap=20,
-                                                   separators=["\n\n", "\n", " ", ""]
-                                                   )
+    # Collapse any sequence of one or more spaces into a single space
+    input_text = re.sub(" +", " ", input_text).strip()
+
+    if metadata["doc_type"] == "decision":
+        if "car_num" not in metadata:
+            # Extract Car Number(s) from file content.
+            all_involved_cars = extract_car_num_from_txt(input_text)
+            if all_involved_cars:
+                # Use the first car found as the primary filter target
+                metadata["car_num"] = all_involved_cars[0]
+
+                # Store ALL involved cars for RAG context.
+                metadata["all_involved_cars"] = ", ".join(all_involved_cars)
+        DEBUG(DBG_LVL_LOW, '"Metadata:" ' + str(metadata))
+
+        # If "Car xxx" is still not found, this file can be skipped.
+        if "car_num" not in metadata:
+            DEBUG(DBG_LVL_MED, "NO CAR FOUND. FILE: %s" + filepath)
+            return ERROR_CODE_FILE_SKIPPED
+
+        # Find relevant markers in the input text.
+        markers = find_markers(input_text)
+        if "Fact" not in markers.keys():
+            DEBUG(DBG_LVL_MED, "Input text")
+            DEBUG(DBG_LVL_MED, input_text)
+            DEBUG(DBG_LVL_MED, "NO FACT FOUND. FILE: %s" + filepath)
+            return ERROR_CODE_FILE_SKIPPED
+
+        if "Reason" not in markers.keys():
+            DEBUG(DBG_LVL_MED, "Input text")
+            DEBUG(DBG_LVL_MED, input_text)
+            DEBUG(DBG_LVL_MED, "NO REASON FOUND. FILE: %s" + filepath)
+            return ERROR_CODE_FILE_SKIPPED
+
+        input_text = markers["Fact"] + " " + markers["Reason"]
+
+    DEBUG(DBG_LVL_MED, "FILE COUNT-%d, CHUNKING: %s" % (counter, filepath))
+
+    # Initialize the splitter
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=CHUNK_SIZE, chunk_overlap=20, separators=["\n\n", "\n", " ", ""]
+    )
 
     # Perform the splitting
-    text_chunks = None
     text_chunks = text_splitter.create_documents([input_text.lower()])
     text_chunks = [doc.page_content for doc in text_chunks]
-    # print("Number of chunks:", len(text_chunks))
+    # DEBUG(DBG_LVL_LOW, "Number of chunks: %s" %len(text_chunks))
     assert len(text_chunks)
 
     # Save the chunks
     data_df = pd.DataFrame(text_chunks, columns=["chunk"])
     data_df["file"] = filename
 
-    jsonl_filename = os.path.join(json_folder, f"chunks-{filename}.jsonl")
-    DEBUG(DBG_LVL_LOW, "Writing chunks to: " + jsonl_filename)
-    with open(jsonl_filename, "w") as json_file:
-        json_file.write(data_df.to_json(orient="records", lines=True))
+    DEBUG(DBG_LVL_MED, "Writing chunks to: " + chunk_jsonl)
+    # Combine base metadata with chunk specifics
+    with open(chunk_jsonl, "w") as f:
+        for i, chunk in enumerate(text_chunks):
+            record = {"id": f"{filename}_{i}", "text": chunk, **metadata}
+            # DEBUG(DBG_LVL_LOW, "Writing chunk ..." + str(json.dumps(record)))
+            f.write(json.dumps(record) + "\n")
 
     return ERROR_CODE_SUCCESS
 
 
+def get_delta_files_to_process(chunk_file_list, json_folder):
+    chunk_jsonl_list = glob.glob(os.path.join(json_folder, "chunks-*.jsonl"))
+    chunk_jsonl_files = [os.path.basename(file) for file in chunk_jsonl_list]
+    # print("len(chunk_jsonl_files) " + str(len(chunk_jsonl_files)))
+
+    if not os.path.isfile(chunk_processed_file):
+        # print("CHUNK PROCESSED file: %s DOES NOT exist" %(chunk_processed_file))
+
+        if len(chunk_jsonl_files):
+            # print("%d no of already processed files" %(len(chunk_jsonl_files)))
+            # This is the case where some files are already processed before CSV tracking is introduced.
+            chunk_processed_set.update(chunk_jsonl_files)
+            chunk_processed_set_orig.update(chunk_jsonl_files)
+
+            processed_df = pd.DataFrame(chunk_jsonl_files, columns=["filename"])
+            processed_df.to_csv(chunk_processed_file, index=False)
+    else:
+        # print("CHUNK PROCESSED file: %s Exist" %(chunk_processed_file))
+
+        df = pd.read_csv(chunk_processed_file)
+        chunk_processed_set.update(df["filename"])
+        chunk_processed_set_orig.update(df["filename"])
+    # print("Size of chunk_processed_set: " + str(len(chunk_processed_set)))
+
+    if os.path.isfile(chunk_skipped_file):
+        # print("CHUNK SKIPPED file: %s Exist" %(chunk_skipped_file))
+
+        df = pd.read_csv(chunk_skipped_file)
+        chunk_skipped_set.update(df["filename"])
+        chunk_skipped_set_orig.update(df["filename"])
+    # print("Size of chunk_skipped_set: %d" %len(chunk_skipped_set))
+
+    skipped = 0
+    already = 0
+    delta_files = []
+    for file in chunk_file_list:
+
+        filename = os.path.basename(file)
+        filename = os.path.splitext(filename)[0]
+        filename = f"chunks-{filename}.jsonl"
+
+        if filename in chunk_processed_set:
+            already += 1
+            continue
+        elif filename in chunk_skipped_set:
+            skipped += 1
+            DEBUG(DBG_LVL_LOW, "ALREADY MARKED AS SKIPPED: %s" % (file))
+            continue
+        else:
+            delta_files.append(file)
+
+    DEBUG(DBG_LVL_LOW, "No of delta_files: %d" % len(delta_files))
+    DEBUG(DBG_LVL_LOW, "No of skipped: %d" % skipped)
+    DEBUG(DBG_LVL_LOW, "No of already processed: %d" % already)
+
+    return delta_files
+
+
 def chunk(tag, json_folder, limit):
 
-    # Make dataset folders
-    os.makedirs(JSON_OUTPUT_DIR, exist_ok=True)
-    os.makedirs(json_folder, exist_ok=True)
-
-    # Initialize a client
-    storage_client = storage.Client()
-
-    # Ensure the destination directory exists
-    assert os.path.exists(DATASET_DIR), DATASET_DIR + " does not exist"
-
-    total_files = 0
-    files_failed = 0
-    files_chunked_now = 0
-    considering_counter = 0
-
+    chunk_file_list = []
     try:
+        # Initialize a client
+        storage_client = storage.Client()
+
         # Get the bucket object
         bucket = storage_client.bucket(GCP_BUCKET)
 
         # List all blobs (files and folder objects)
+        DEBUG(DBG_LVL_MED, "Reading file name blob from GCP start")
         blobs = bucket.list_blobs()
+        DEBUG(DBG_LVL_MED, "Reading file name blob from GCP done")
 
         for blob in blobs:
-            if total_files >= limit:
-                break
-
             # GCS doesn't have true folders; they are objects ending in '/'.
             # prefixes are considered as folders and non-prefixes are
             # considered as files.
+            if blob.name.endswith("/"):  # This is a file object
+                continue
+            if not "raw_pdfs/" + tag in blob.name:
+                continue
+            if not is_file_interesting(blob.name):
+                # Skip the files that are not of interest.
+                continue
 
-            if not blob.name.endswith("/"):  # This is a file object
-                if "raw_pdfs/" + tag in blob.name:
-                    # Skip the files that are not of interest.
-                    if not is_file_interesting(blob.name):
-                        # print(f"    -> Not interesting: {blob.name}")
-                        continue
-
-                    # DEBUG(DBG_LVL_LOW, f"gs://{GCP_BUCKET}/{blob.name}")
-                    considering_counter += 1
-
-                    filename = os.path.basename(blob.name)
-                    filename = os.path.splitext(filename)[0]
-
-                    filepath = ROOT_DIR + "/" + blob.name
-
-                    ret_val = chunk_file(
-                        filepath, filename, json_folder, considering_counter
-                    )
-                    if ret_val == ERROR_CODE_SUCCESS:
-                        DEBUG(DBG_LVL_LOW, f"->CHUNKED: {filepath}")
-                        files_chunked_now += 1
-                    elif ret_val == ERROR_CODE_FILE_CORRUPTED:
-                        DEBUG(DBG_LVL_HIGH, f"->CORRUPTED: {filepath}")
-                        files_failed += 1
-                    elif ret_val == ERROR_CODE_ALREADY_CHUNKED:
-                        # ALREADY CHUNKED
-                        pass
-
-                    total_files += 1
+            # DEBUG(DBG_LVL_LOW, f"gs://{GCP_BUCKET}/{blob.name}")
+            filepath = ROOT_DIR + "/" + blob.name
+            chunk_file_list.append(filepath)
     except Exception as e:
         ret_str = "INFRA FAILED. Error code: " + str(e) + "\n"
+        DEBUG(DBG_LVL_MED, ret_str)
         return ret_str, ERROR_CODE_GCS_FAILURE
 
-    ret_str = "No of files corrupted: " + str(files_failed) + "\n"
-    ret_str += "No of files processed now: " + str(files_chunked_now) + "\n"
+    total_files = 0
+    total_failed = 0
+    total_skipped = 0
+    files_chunked_now = 0
+    total_already_chunked = 0
+
+    # limit = 10
+    delta_files = get_delta_files_to_process(chunk_file_list, json_folder)
+
+    for file in delta_files:
+        if total_files > limit:
+            break
+
+        filename = os.path.basename(file)
+        filename = os.path.splitext(filename)[0]
+
+        # Create metadata only for the decision files.
+        metadata = parse_metadata_from_text(filename)
+
+        retval = chunk_file(file, filename, json_folder, total_files, metadata)
+
+        if ERROR_CODE_SUCCESS == retval:
+            DEBUG(DBG_LVL_MED, f"->CHUNKED: {filepath}")
+            chunk_processed_set.update([f"chunks-{filename}.jsonl"])
+            files_chunked_now += 1
+        elif ERROR_CODE_FILE_SKIPPED == retval:
+            DEBUG(DBG_LVL_MED, f"->SKIPPED: {filepath}")
+            chunk_skipped_set.update([f"chunks-{filename}.jsonl"])
+            total_skipped += 1
+        elif ERROR_CODE_FILE_CORRUPTED == retval:
+            DEBUG(DBG_LVL_MED, f"->CORRUPTED: {filepath}")
+            chunk_corrupted_set.update(filepath)
+            chunk_skipped_set.update([f"chunks-{filename}.jsonl"])
+            total_failed += 1
+        elif ERROR_CODE_ALREADY_CHUNKED == retval:
+            chunk_processed_set.update([f"chunks-{filename}.jsonl"])
+            total_already_chunked += 1
+        else:
+            assert True, "Unknown error: " + str(retval)
+
+        total_files += 1
+
+    # Update CHUNK_PROCESSED_LIST_FILE
+    if len(chunk_processed_set) and chunk_processed_set != chunk_processed_set_orig:
+        processed_df = pd.DataFrame(list(chunk_processed_set), columns=["filename"])
+        processed_df.to_csv(chunk_processed_file, index=False)
+
+    # Update CHUNK_SKIPPED_LIST_FILE
+    if len(chunk_skipped_set) and chunk_skipped_set != chunk_skipped_set_orig:
+        skipped_df = pd.DataFrame(list(chunk_skipped_set), columns=["filename"])
+        skipped_df.to_csv(chunk_skipped_file, index=False)
+
+    # Update CHUNK_CORRUPTED_LIST_FILE
+    if len(chunk_corrupted_set) and chunk_corrupted_set != chunk_corrupted_set_orig:
+        corrupted_df = pd.DataFrame(list(chunk_corrupted_set), columns=["filename"])
+        corrupted_df.to_csv(chunk_corrupted_file, index=False)
+
+    ret_str = "No of files processed now: " + str(files_chunked_now) + "\n"
+    ret_str += "No of files already chunked: " + str(total_already_chunked) + "\n"
+    ret_str += "No of files skipped: " + str(total_skipped) + "\n"
+    ret_str += "No of files corrupted/not accessible: " + str(total_failed) + "\n"
     ret_str += "Total no of files in the corpus: " + str(total_files)
 
     return ret_str, ERROR_CODE_SUCCESS
 
 
 def create_chunks(limit=sys.maxsize):
-    DEBUG(DBG_LVL_LOW, "MAX NUMBER OF FILES: " + str(limit))
+    DEBUG(DBG_LVL_LOW, "NUM FILES LIMIT: " + str(limit))
+
+    # Ensure the destination directory exists
+    assert os.path.exists(DATASET_DIR), DATASET_DIR + " does not exist"
+
+    # Make dataset folders
+    os.makedirs(JSON_OUTPUT_DIR, exist_ok=True)
+    os.makedirs(DECISION_JSON_DIR, exist_ok=True)
+    os.makedirs(REGULATION_JSON_DIR, exist_ok=True)
+
+    DEBUG(DBG_LVL_HIGH, "\nChunking for decision files start")
     ret_str, ret_val = chunk("decisions", DECISION_JSON_DIR, int(limit))
-    ret_str_1 = "\nChunking for decision files done. \n" + ret_str + "\n"
+    ret_str_1 = "Chunking for decision files done. \n" + ret_str + "\n"
+    DEBUG(DBG_LVL_HIGH, ret_str_1)
     if ret_val == ERROR_CODE_GCS_FAILURE:
         DEBUG(DBG_LVL_HIGH, ret_str_1)
         return ret_str_1, ERROR_CODE_GCS_FAILURE
 
+    DEBUG(DBG_LVL_HIGH, "\nChunking for regulation files start")
     ret_str, ret_val = chunk("regulations", REGULATION_JSON_DIR, int(limit))
-    ret_str_2 = "\nChunking for regulation files done. \n" + ret_str
+    ret_str_2 = "Chunking for regulation files done\n" + ret_str
+    DEBUG(DBG_LVL_HIGH, ret_str_2)
 
     ret_str = ret_str_1 + ret_str_2
-    DEBUG(DBG_LVL_MED, ret_str)
     if ret_val == ERROR_CODE_GCS_FAILURE:
         return ret_str, ERROR_CODE_GCS_FAILURE
-
     return ret_str, ERROR_CODE_SUCCESS
 
 
 # =============================================================================
 #                                GENERATE EMBEDDINGS
 # =============================================================================
-def generate_embeddings(chunks, batch_size=250):  # Max for Vertex AI
-    all_embeds = []
+def find_embed_files(json_folder):
+    # Get the list of embedding files
+    jsonl_file_list = glob.glob(os.path.join(json_folder, "embeddings-*.jsonl"))
+    DEBUG(DBG_LVL_MED, "Num files to process: %d" % len(jsonl_file_list))
+    jsonl_file_names = [os.path.basename(file) for file in jsonl_file_list]
 
-    model = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL)
+    return jsonl_file_list, jsonl_file_names
+
+
+def generate_embeddings(embed_model, chunks, batch_size=250):  # Max for Vertex AI
+    all_embeds = []
 
     for i in range(0, len(chunks), batch_size):
         batch = chunks[i : i + batch_size]
         try:
-            embeddings = model.get_embeddings(batch, output_dimensionality=EMBED_DIM)
+            embeddings = embed_model.get_embeddings(
+                batch, output_dimensionality=EMBED_DIM
+            )
             all_embeds.extend([embedding.values for embedding in embeddings])
         except Exception as e:
             DEBUG(DBG_LVL_HIGH, f"Embeddings failed. Last error: {str(e)}")
@@ -281,62 +789,82 @@ def generate_embeddings(chunks, batch_size=250):  # Max for Vertex AI
     return all_embeds
 
 
-def embed(json_folder, limit):
+def embed(json_folder, file_limit):
     ret_val = ERROR_CODE_SUCCESS
+
+    embed_model = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL)
 
     # Get the list of chunk files
     jsonl_files = glob.glob(os.path.join(json_folder, "chunks-*.jsonl"))
     DEBUG(DBG_LVL_LOW, "Number of files to process: %d" % len(jsonl_files))
 
-    file_counter = 0
-    embedded_now = 0
-    for jsonl_file in jsonl_files:
-        if file_counter >= limit:
+    total_file_counter = 0
+    total_embedded_now = 0
+    total_prev_embedded = 0
+    for chunk_jsonl_file in jsonl_files:
+        if total_file_counter >= file_limit:
             break
-        file_counter += 1
+        total_file_counter += 1
 
-        # Save embeddings into corresponding file.
-        jsonl_filename = jsonl_file.replace("chunks-", "embeddings-")
-        if os.path.isfile(jsonl_filename):  # File already processed
-            DEBUG(DBG_LVL_LOW, "%s - ALREADY DONE." % jsonl_file)
+        # Check if an embedded file for this chunk file is already created.
+        embed_jsonl_file = chunk_jsonl_file.replace("chunks-", "embeddings-")
+        if os.path.isfile(embed_jsonl_file):  # File already processed
+            DEBUG(
+                DBG_LVL_LOW,
+                "COUNT: %d, ALREADY DONE - %s" % (total_file_counter, chunk_jsonl_file),
+            )
+            total_prev_embedded += 1
             continue
         else:
-            DEBUG(DBG_LVL_MED, "%s - NOW EMBEDDING" % jsonl_file)
+            DEBUG(
+                DBG_LVL_MED,
+                "COUNT: %d, NOW EMBEDDING - %s"
+                % (total_file_counter, chunk_jsonl_file),
+            )
 
-        data_df = pd.read_json(jsonl_file, lines=True)
+        # Read from Chunk file.
+        records = []
+        with open(chunk_jsonl_file, "r") as f:
+            records = [json.loads(line) for line in f]
 
-        chunks = data_df["chunk"].values
-        chunks = chunks.tolist()
+        chunks = [record["text"] for record in records]
+
         try:
-            data_df["embedding"] = generate_embeddings(chunks, batch_size=100)
+            embeddings = generate_embeddings(embed_model, chunks, batch_size=BATCH_SIZE)
         except Exception as e:
             DEBUG(DBG_LVL_LOW, f"Embeddings failed totally. Error: {str(e)}")
-
             ret_val = ERROR_CODE_GCS_FAILURE
             break
 
-        embedded_now += 1
-        with open(jsonl_filename, "w") as json_file:
-            json_file.write(data_df.to_json(orient="records", lines=True))
+        DEBUG(DBG_LVL_LOW, "Writing embeddings to: " + embed_jsonl_file)
 
-    ret_str = "No of files embedded now: " + str(embedded_now) + "\n"
-    prev_embedded = file_counter - embedded_now
-    ret_str += "No of previously embedded files: " + str(prev_embedded) + "\n"
-    ret_str += "Total no of embedded files: " + str(file_counter) + "\n"
+        total_embedded_now += 1
+        with open(embed_jsonl_file, "w") as f:
+            for record, embedding in zip(records, embeddings):
+                record["embedding"] = embedding
+                f.write(json.dumps(record) + "\n")
+
+    total_prev_embedded = total_file_counter - total_embedded_now
+    ret_str = "Num files embedded now: " + str(total_embedded_now) + "\n"
+    ret_str += "Num previously embedded files: " + str(total_prev_embedded) + "\n"
+    ret_str += "Num all embedded files in corpus: " + str(total_file_counter) + "\n"
 
     return ret_str, ret_val
 
 
-def create_embeddings(limit=sys.maxsize):
-    DEBUG(DBG_LVL_LOW, "EMBEDDING LIMIT: " + str(limit))
-    ret_str, ret_val = embed(DECISION_JSON_DIR, int(limit))
-    ret_str_1 = "\nEmbedding for decision files done. \n" + ret_str + "\n"
+def create_embeddings(file_limit=sys.maxsize):
+    DEBUG(DBG_LVL_LOW, "EMBEDDING FILE LIMIT: " + str(file_limit))
+
+    DEBUG(DBG_LVL_HIGH, "\nEmbedding for decision files start")
+    ret_str, ret_val = embed(DECISION_JSON_DIR, int(file_limit))
+    ret_str_1 = "Embedding for decision files done. \n" + ret_str + "\n"
     if ret_val == ERROR_CODE_GCS_FAILURE:
         DEBUG(DBG_LVL_HIGH, ret_str_1)
         return ret_str_1, ERROR_CODE_GCS_FAILURE
 
-    ret_str, ret_val = embed(REGULATION_JSON_DIR, int(limit))
-    ret_str_2 = "\nEmbedding for regulation files done. \n" + ret_str + "\n"
+    DEBUG(DBG_LVL_HIGH, "\nEmbedding for regulation files start")
+    ret_str, ret_val = embed(REGULATION_JSON_DIR, int(file_limit))
+    ret_str_2 = "Embedding for regulation files done. \n" + ret_str + "\n"
 
     ret_str = ret_str_1 + ret_str_2
     DEBUG(DBG_LVL_MED, ret_str)
@@ -349,35 +877,69 @@ def create_embeddings(limit=sys.maxsize):
 # =============================================================================
 #                        STORE EMBEDDINGS INTO CHROMADB
 # =============================================================================
-def store_text_embeddings(df, collection, batch_size=500):
+def store_text_embeddings(jsonl_file, target_collection, batch_size=500):
+    filename = os.path.basename(jsonl_file)
+    filename = os.path.splitext(filename)[0]
+    print("filename: " + filename)
+    base_metadata = parse_metadata_from_text(filename)
+    print("Metadata: " + str(base_metadata))
 
-    # Generate ids
-    df["id"] = df.index.astype(str)
-    hashed_docs = df["file"].apply(
-        lambda x: hashlib.sha256(x.encode()).hexdigest()[:16]
-    )
-    df["id"] = hashed_docs + "-" + df["id"]
+    ids, embeddings, documents, metadatas = [], [], [], []
+    with open(jsonl_file, "r") as f:
+        for line in f:
+            record = json.loads(line)
 
-    # Process data in batches
-    total_inserted = 0
+            # Combine base metadata with chunk-specific metadata
+            chunk_metadata = base_metadata.copy()
+            # Store original filename and chunk index for traceability
+            chunk_metadata["chunk_id"] = record["id"]
+
+            ids.append(record["id"])
+            embeddings.append(record["embedding"])
+            documents.append(record["text"])
+            metadatas.append(chunk_metadata)
+
     try:
-        for i in range(0, df.shape[0], batch_size):
-            # Create a copy of the batch and reset the index
-            batch = df.iloc[i : i + batch_size].copy().reset_index(drop=True)
+        # Add data to the collection
 
-            ids = batch["id"].tolist()
-            documents = batch["chunk"].tolist()
-            embeddings = batch["embedding"].tolist()
-
-            collection.add(ids=ids, documents=documents, embeddings=embeddings)
-            total_inserted += len(batch)
+        # TODO: Exeriment whether batching will be of any use.
+        target_collection.add(
+            embeddings=embeddings, documents=documents, metadatas=metadatas, ids=ids
+        )
+        print(f"Loaded {len(ids)} embeddings into ChromaDB from '{filename}'\n")
     except Exception as e:
-        DEBUG(DBG_LVL_HIGH, f"DB store failed. Error: {str(e)}")
+        DEBUG(DBG_LVL_HIGH, f"ChromaDB store failed. Error: {str(e)}")
         raise
 
 
-def store(json_folder, target_collection, testing):
+def store(
+    jsonl_file_list, jsonl_file_names, target_collection, store_list_file, testing
+):
     ret_val = ERROR_CODE_SUCCESS
+
+    DEBUG(DBG_LVL_LOW, "target_collection: " + target_collection)
+    DEBUG(DBG_LVL_LOW, "store_list_file: " + store_list_file)
+
+    already_stored_set = set()
+    if os.path.isfile(store_list_file):
+        print("File: %s Exist" % (store_list_file))
+        df = pd.read_csv(store_list_file)
+        already_stored_set.update(df["filename"])
+    # print("Size of alread_stored_set: %d" %len(already_stored_set))
+
+    to_be_stored_set = set()
+    for file, filename in zip(jsonl_file_list, jsonl_file_names):
+        to_be_stored_set.update([filename])
+    # print("Size of to_be_stored_set: %d" %len(to_be_stored_set))
+
+    if len(to_be_stored_set) > 0 and already_stored_set == to_be_stored_set:
+        DEBUG(DBG_LVL_LOW, "NO DIVERGENCE. Nothing to do")
+        ret_str = "No of files stored: " + str(len(to_be_stored_set)) + "\n"
+        return ret_str, ERROR_CODE_SUCCESS
+
+    DEBUG(
+        DBG_LVL_LOW, "There is divergence. Recreate collection - %s" % target_collection
+    )
 
     # Clear Cache
     chromadb.api.client.SharedSystemClient.clear_system_cache()
@@ -399,45 +961,62 @@ def store(json_folder, target_collection, testing):
     DEBUG(DBG_LVL_HIGH, f"Created new empty collection '{target_collection}'")
     DEBUG(DBG_LVL_LOW, "Collection: %s" % collection)
 
-    # Get the list of embedding files
-    jsonl_files = glob.glob(os.path.join(json_folder, "embeddings-*.jsonl"))
-    DEBUG(DBG_LVL_MED, "Number of files to process: %d" % len(jsonl_files))
-
-    # Process
+    # Process each embeddings file
     stored_files = 0
-    for jsonl_file in jsonl_files:
+    for jsonl_file in jsonl_file_list:
         if testing:
             break
         DEBUG(DBG_LVL_LOW, "Processing file: %s" % jsonl_file)
 
-        data_df = pd.read_json(jsonl_file, lines=True)
         try:
             # Store data
-            store_text_embeddings(data_df, collection)
+            store_text_embeddings(jsonl_file, collection)
         except Exception:
             DEBUG(DBG_LVL_HIGH, "Failed to store %s in chromadb:" % jsonl_file)
             ret_val = ERROR_CODE_CHROMADB_FAILED
             break
         stored_files += 1
 
+    if stored_files:
+        assert stored_files == len(to_be_stored_set)
+        store_df = pd.DataFrame(list(to_be_stored_set), columns=["filename"])
+        store_df.to_csv(store_list_file, index=False)
+
     ret_str = "No of files stored: " + str(stored_files) + "\n"
     return ret_str, ret_val
 
 
 def store_embeddings(testing=False):
-    ret_str, ret_val = store(DECISION_JSON_DIR, DECISIONS_COLLECTION, bool(testing))
-    ret_str_1 = "\nStoring of embeddings of decision files in chromadb done."
+    DEBUG(DBG_LVL_HIGH, "\nStoring of embeddings of decision files in Chromadb start")
+    jsonl_file_list, jsonl_file_names = find_embed_files(DECISION_JSON_DIR)
+    ret_str, ret_val = store(
+        jsonl_file_list,
+        jsonl_file_names,
+        DECISIONS_COLLECTION,
+        embed_deci_store_list_file,
+        bool(testing),
+    )
+    ret_str_1 = "Storing of embeddings of decision files in Chromadb done."
     ret_str_1 += "\n" + ret_str + "\n"
+    DEBUG(DBG_LVL_HIGH, ret_str_1)
     if ret_val != ERROR_CODE_SUCCESS:
         DEBUG(DBG_LVL_HIGH, ret_str_1)
         return ret_str_1, HTTP_CODE_GENERIC_FAILURE
 
-    ret_str, ret_val = store(REGULATION_JSON_DIR, REGULATIONS_COLLECTION, bool(testing))
-    ret_str_2 = "\nStoring of embeddings of regulation files in chromadb done."
+    DEBUG(DBG_LVL_HIGH, "\nStoring of embeddings of regulation files in Chromadb start")
+    jsonl_file_list, jsonl_file_names = find_embed_files(REGULATION_JSON_DIR)
+    ret_str, ret_val = store(
+        jsonl_file_list,
+        jsonl_file_names,
+        REGULATIONS_COLLECTION,
+        embed_regul_store_list_file,
+        bool(testing),
+    )
+    ret_str_2 = "Storing of embeddings of regulation files in Chromadb done."
     ret_str_2 += "\n" + ret_str
+    DEBUG(DBG_LVL_HIGH, ret_str_2)
 
     ret_str = ret_str_1 + ret_str_2
-    DEBUG(DBG_LVL_MED, ret_str)
     return ret_str, ret_val
 
 
@@ -447,27 +1026,49 @@ def store_embeddings(testing=False):
 def query(user_query, llm_choice: str = PARAM_GOOGLE_LLM):
     ret_val = ERROR_CODE_SUCCESS
 
-    # STEP-1: Instantiate a pretrained model.
-    model = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL)
-
-    # STEP-2: Connect to chroma DB
-    client = chromadb.HttpClient(host=CHROMADB_HOST, port=CHROMADB_PORT)
-
-    # STEP-3: Create embeddings for the user query.
-    DEBUG(DBG_LVL_HIGH, "Query: %s" % user_query)
-
     user_query = user_query.lower()
+
+    # STEP-1: Instantiate a pretrained model.
+    embed_model = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL)
+
+    # STEP-2: Create embeddings for the user query.
+    DEBUG(DBG_LVL_LOW, "Query: %s" % user_query)
     try:
-        embeddings = model.get_embeddings([user_query], output_dimensionality=EMBED_DIM)
+        embeddings = embed_model.get_embeddings(
+            [user_query], output_dimensionality=EMBED_DIM
+        )
     except Exception as e:
         ret_str = f"Failed to generate embeddings. Last error: {str(e)}"
         DEBUG(DBG_LVL_HIGH, ret_str)
         return ret_str, ERROR_CODE_GCS_FAILURE
 
     query_embedding = embeddings[0].values
-    DEBUG(DBG_LVL_MED, "Query embeddings: " + str(query_embedding))
+    DEBUG(DBG_LVL_LOW, "Query embeddings: " + str(query_embedding))
+
+    # STEP-3: Connect to chroma DB
+    client = chromadb.HttpClient(host=CHROMADB_HOST, port=CHROMADB_PORT)
 
     # STEP-4: Retrieve similar past decisions.
+    #  STEP-4.1 Extract metadata from user query.
+    query_metadata = parse_metadata_from_text(user_query)
+    print("Query metadata: " + str(query_metadata))
+
+    #  STEP-4.2 Convert extracted metadata into a ChromaDB 'where' filter
+    decision_filter = {"$and": []}
+    if "location" in query_metadata:
+        decision_filter["$and"].append({"location": query_metadata["location"]})
+    if "year" in query_metadata:
+        decision_filter["$and"].append({"year": query_metadata["year"]})
+    if "car_num" in query_metadata:
+        decision_filter["$and"].append({"car_num": query_metadata["car_num"]})
+
+    #  STEP-4.3 Apply filter only if car number is known.
+    target_filter = None
+    if decision_filter["$and"]:
+        # If there are filters, use the $and clause
+        target_filter = decision_filter
+    DEBUG(DBG_LVL_LOW, "target_filter: " + str(target_filter))
+
     try:
         dec_collection = client.get_collection(name=DECISIONS_COLLECTION)
     except Exception:
@@ -477,8 +1078,9 @@ def query(user_query, llm_choice: str = PARAM_GOOGLE_LLM):
 
     results_decision = dec_collection.query(
         query_embeddings=[query_embedding],
-        include=["documents", "distances"],
-        n_results=10,
+        n_results=5,
+        include=["documents", "metadatas"],
+        where=target_filter,  # METADATA FILTER APPLIED HERE
     )
 
     # STEP-5: Retrieve relevant regulations.
@@ -491,7 +1093,7 @@ def query(user_query, llm_choice: str = PARAM_GOOGLE_LLM):
 
     results_regulation = reg_collection.query(
         query_embeddings=[query_embedding],
-        n_results=10,
+        n_results=3,
     )
 
     # STEP-6: Create input for LLM.
@@ -505,8 +1107,8 @@ def query(user_query, llm_choice: str = PARAM_GOOGLE_LLM):
     Relevant historical decisions for comparison:
     {results_decision}
 
-    Perform symantic similarity of the user query against results_decisions and results_regulations and perform the following tasks.
-    Convert text into lowercase if it provides better accuracy.
+    Perform symantic similarity of the user query against results_decisions and results_regulations and
+    perform the following tasks.
 
     TASKS:
     1. Provide a clear explanation of the infringement and what the regulation
@@ -517,11 +1119,12 @@ def query(user_query, llm_choice: str = PARAM_GOOGLE_LLM):
 
     Explain each task in a simple and concise manner.
     Make the headings of the output of each task as CAPITAL LETTERS.
+    Convert text into lowercase if it provides better accuracy.
 
     If the answer is not in the context, say you cannot answer based on the
     information provided.
     """
-    DEBUG(DBG_LVL_MED, prompt_template)
+    DEBUG(DBG_LVL_HIGH, prompt_template)
 
     # STEP-7: Send context and query to target LLM.
     DEBUG(DBG_LVL_HIGH, "llm_choice: " + str(llm_choice))
@@ -531,7 +1134,7 @@ def query(user_query, llm_choice: str = PARAM_GOOGLE_LLM):
     llm_model = GenerativeModel(selected_llm)
     DEBUG(DBG_LVL_HIGH, "\nSending prompt to the LLM...")
 
-    DEBUG(DBG_LVL_MED, "\n\nLLM RESPONSE")
+    DEBUG(DBG_LVL_HIGH, "\n\nLLM RESPONSE")
     answer = ""
     try:
         response = llm_model.generate_content(prompt_template)
@@ -549,6 +1152,25 @@ def query(user_query, llm_choice: str = PARAM_GOOGLE_LLM):
 
 
 def main(args=None):
+    create_country_params()
+
+    # Load spacy's pre-trained English language processing pipeline.
+    global nlp
+    try:
+        nlp = spacy.load("en_core_web_sm")
+        print("Spacy model loaded successfully.")
+    except OSError:
+        print("Model not found. Downloading...")
+        try:
+            download("en_core_web_sm")
+            nlp = spacy.load("en_core_web_sm")
+            print("Model downloaded and loaded.")
+        except Exception as e:
+            ret_str = f"Spacy loading failed: {e}"
+            return ret_str, ERROR_CODE_SPACY_FAILED
+    except Exception as e:
+        ret_str = f"Spacy loading failed: {e}"
+        return ret_str, ERROR_CODE_SPACY_FAILED
 
     if args.all:
         create_chunks()
