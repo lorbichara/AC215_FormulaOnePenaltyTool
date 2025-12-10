@@ -7,6 +7,7 @@ src/rag/output
 /dataset
 /input
 /output
+pulumi-plugins/
 
 chunk_processed.csv
 chunk_skipped.csv
