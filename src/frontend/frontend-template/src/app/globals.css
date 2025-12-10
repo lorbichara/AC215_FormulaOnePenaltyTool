@@ -10,13 +10,11 @@
     }
 
     body {
-        @apply antialiased;
-        font-family: 'Roboto', sans-serif;
+        @apply antialiased font-sans;
     }
 
     h1, h2, h3, h4, h5, h6 {
-        @apply font-semibold tracking-tight;
-        font-family: 'Titillium Web', sans-serif;
+        @apply font-heading font-semibold tracking-tight;
     }
 
     /* Neutral Design Tokens - Light Mode */

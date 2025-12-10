@@ -8,8 +8,12 @@ module.exports = {
     theme: {
     	extend: {
 			fontFamily: {
-				sans: ["'Roboto'", 'sans-serif'],
-				heading: ["'Titillium Web'", 'sans-serif'],
+				sans: ["var(--font-formula-one)", 'Roboto', 'sans-serif'],
+				heading: ["var(--font-formula-one-regular)", "'Titillium Web'", 'sans-serif'],
+				'formulaone-regular': ["var(--font-formula-one)", 'sans-serif'],
+				'formulaone-bold': ["var(--font-formula-one)", 'sans-serif'],
+				'formulaone-italic': ["var(--font-formula-one)", 'sans-serif'],
+				'formulaone-wide': ["var(--font-formula-one-wide)", 'sans-serif'],
 			},
     		borderRadius: {
     			lg: 'var(--radius)',

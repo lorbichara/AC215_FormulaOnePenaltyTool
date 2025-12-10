@@ -1,0 +1,31 @@
+@font-face {
+    font-family: 'FormulaOne-Regular';
+    src: url('a5a7d0679f778e47-s.p.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'FormulaOne-Bold';
+    src: url('1f75a4dd429d77b6-s.p.woff2') format('woff2');
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'FormulaOne-Italic';
+    src: url('ad585708510478a8-s.p.woff2') format('woff2');
+    font-weight: 400;
+    font-style: italic;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'FormulaOne-Wide';
+    src: url('fc1344fa9bb93795-s.p.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
