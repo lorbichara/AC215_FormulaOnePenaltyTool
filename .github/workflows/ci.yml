@@ -34,15 +34,13 @@ jobs:
       - name: Start container in background
         env:
           GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SA_KEY }}
-
+        run: |
           echo "GCP_SERVICE_ACCOUNT_JSON set for docker-compose."
           echo $GCP_SERVICE_ACCOUNT_JSON
 
           echo "secrets.GCP_SA_KEY"
           echo ${{ secrets.GCP_SA_KEY }}
 
-        run: |
-          export HOST_HOME=$HOME
           docker compose up -d
 
       - name: Wait for server to be ready
