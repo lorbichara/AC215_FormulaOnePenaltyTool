@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { UploadCloud, Sparkles } from 'lucide-react';
 
-const samplePrompt = 'Analyze the penalty for Car 55 at the 2024 Abu Dhabi GP for unsafe release. Was the time penalty consistent with precedents?';
+const samplePrompt = 'https://www.fia.com/sites/default/files/decision-document/2021%20Abu%20Dhabi%20Grand%20Prix%20-%20Decision%20-%20Mercedes%20Protest%20Art.%2048.12.pdf';
 
 export default function IncidentInput({ onAnalyze, isAnalyzing }) {
     const [text, setText] = useState('');
@@ -28,10 +28,10 @@ export default function IncidentInput({ onAnalyze, isAnalyzing }) {
                         Steward Console
                     </p>
                     <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground">
-                        Upload the incident for analysis
+                        Submit the FIA decision link or incident summary
                     </h2>
                     <p className="text-muted-foreground mt-2 max-w-3xl">
-                        Paste incident notes or a summary of the penalty. We’ll cross-check with the regs and historical precedents and return a steward-style decision.
+                        Paste a URL to an official FIA PDF decision (preferred) or provide incident notes. We’ll extract context, cross-check regulations, and return a steward-style dashboard.
                     </p>
                 </div>
 
@@ -39,7 +39,7 @@ export default function IncidentInput({ onAnalyze, isAnalyzing }) {
                     <Textarea
                         value={text}
                         onChange={(e) => setText(e.target.value)}
-                        placeholder="Example: Lap 42, Car 16 left the track at Turn 5 and gained an advantage while overtaking..."
+                        placeholder="Example: https://www.fia.com/sites/default/files/decision-document/2021%20Abu%20Dhabi%20Grand%20Prix%20-%20Decision%20-%20Mercedes%20Protest%20Art.%2048.12.pdf"
                         className="min-h-[140px] bg-black/30 border-slate-800 focus-visible:ring-primary text-base"
                         disabled={isAnalyzing}
                     />

@@ -55,8 +55,9 @@ export default function ChatInput({ onSendMessage, isTyping }) {
                         key={prompt}
                         type="button"
                         onClick={() => setMessage(prompt)}
-                        className="text-xs px-3 py-2 rounded-md border border-border bg-muted/60 hover:bg-muted transition-colors text-foreground"
+                        className="text-[11px] font-mono font-semibold uppercase tracking-tight px-3 py-2 rounded-md border border-border bg-muted/60 hover:bg-background transition-colors text-foreground flex items-center gap-2 shadow-sm hover:border-primary"
                     >
+                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground group-hover:bg-primary transition-colors" />
                         {prompt}
                     </button>
                 ))}

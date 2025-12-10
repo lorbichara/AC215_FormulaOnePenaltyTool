@@ -39,8 +39,8 @@ export default function AnalyzePage() {
                         Race Control Decision Desk
                     </h1>
                     <p className="text-muted-foreground max-w-3xl mx-auto">
-                        Merge of our steward UI with the latest dashboard styling. Paste incident context to get a fairness read,
-                        regulation citations, and similar precedents while keeping the current project fonts.
+                        Drop in a link to an official FIA PDF decision or paste the incident summary to generate a steward-style dashboard
+                        with fairness, regulations cited, and similar precedents.
                     </p>
                 </div>
 
