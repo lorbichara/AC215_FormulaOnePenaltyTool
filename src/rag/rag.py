@@ -61,7 +61,7 @@ EMBED_DIM = 256
 DBG_LVL_HIGH = 2
 DBG_LVL_MED = 1
 DBG_LVL_LOW = 0
-global_debug_level = DBG_LVL_HIGH
+global_debug_level = DBG_LVL_MED
 
 
 def DEBUG(level, input_string):
@@ -147,7 +147,7 @@ def get_country_adjectives_map():
             country = CountryInfo(country_name)
             demonyms = country.demonym()
         except Exception as e:
-            # print(f"An unexpected error occurred: {e}")
+            DEBUG(DBG_LVL_LOW, f"An unexpected error occurred: {e}")
             continue
 
         # The output might be a single string or a list (for countries with multiple)
@@ -666,13 +666,13 @@ def chunk(tag, json_folder, limit):
             # considered as files.
             if blob.name.endswith("/"):  # This is a file object
                 continue
-            if not "raw_pdfs/" + tag in blob.name:
+            if not "input/" + tag in blob.name:
                 continue
             if not is_file_interesting(blob.name):
                 # Skip the files that are not of interest.
                 continue
 
-            # DEBUG(DBG_LVL_LOW, f"gs://{GCP_BUCKET}/{blob.name}")
+            DEBUG(DBG_LVL_LOW, f"gs://{GCP_BUCKET}/{blob.name}")
             filepath = ROOT_DIR + "/" + blob.name
             chunk_file_list.append(filepath)
     except Exception as e:
@@ -688,6 +688,7 @@ def chunk(tag, json_folder, limit):
 
     # limit = 10
     delta_files = get_delta_files_to_process(chunk_file_list, json_folder)
+    DEBUG(DBG_LVL_MED, "Total files to process: " + str(len(delta_files)))
 
     for file in delta_files:
         if total_files > limit:

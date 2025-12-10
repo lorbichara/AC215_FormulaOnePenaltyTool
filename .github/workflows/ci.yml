@@ -32,13 +32,24 @@ jobs:
           docker build -t f1-frontend .
 
       - name: Start container in background
+        env:
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SA_KEY }}
+
+          echo "GCP_SERVICE_ACCOUNT_JSON set for docker-compose."
+          echo $GCP_SERVICE_ACCOUNT_JSON
+
+          echo "secrets.GCP_SA_KEY"
+          echo ${{ secrets.GCP_SA_KEY }}
+
         run: |
+          export HOST_HOME=$HOME
           docker compose up -d
 
       - name: Wait for server to be ready
         run: |
           echo "Waiting for API backend server to start..."
           sleep 120
+          docker logs rag
           curl -f http://localhost:9000/ || exit 1
 
       - name: Run Black formatter check
@@ -48,7 +59,7 @@ jobs:
 
       - name: Run Flake8 linter
         run: |
-          docker exec rag /.venv/bin/flake8 --max-line-length=140  --extend-ignore=E203,W503,E402 src/
+          docker exec rag /.venv/bin/flake8 --max-line-length=160  --extend-ignore=E203,W503,E402 src/
         continue-on-error: true
 
       - name: Run integration tests

@@ -19,6 +19,5 @@ docker kill ac215-chroma || true
 docker rm ac215-chroma || true
 
 docker compose run --rm --service-ports --name rag rag
-
 #docker compose up
-#docker compose up -d rag
+#docker compose up -d

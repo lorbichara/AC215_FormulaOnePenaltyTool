@@ -12,11 +12,11 @@ services:
             - "/dev/fuse:/dev/fuse"
         environment:
             ROOT_DIR: "/app"
-            DATASET_DIR: "/app/raw_pdfs"
+            DATASET_DIR: "/app/input"
             OUTPUT_DIR: "/app/output"
-            GOOGLE_APPLICATION_CREDENTIALS: "/app/secrets/ac215-f1penaltytool.json"
-            GCP_PROJECT: "ac215-f1penaltytool"
-            GCP_BUCKET: "f1penaltydocs"
+            GCP_SERVICE_ACCOUNT_JSON: ${GCP_SERVICE_ACCOUNT_JSON:-}
+            GCP_PROJECT: "f1penaltytool"
+            GCP_BUCKET: "f1penaltytooldocs"
             GCP_ZONE: "us-central1-a"
             MOUNT_POINT: "/mnt/gcs_data"
             CHROMADB_HOST: ac215-chromadb

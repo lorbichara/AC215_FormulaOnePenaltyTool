@@ -5,18 +5,36 @@ echo "Architecture: $(uname -m)"
 echo "Python version: $(python --version)"
 echo "UV version: $(uv --version)"
 
-gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS
+echo "[entrypoint] GCP_SERVICE_ACCOUNT_JSON='$GCP_SERVICE_ACCOUNT_JSON'"
+
+if [ -n "$GCP_SERVICE_ACCOUNT_JSON" ]; then
+    # Container on Github
+    echo "[entrypoint] Detected GCP_SERVICE_ACCOUNT_JSON environment variable."
+
+    echo "$GCP_SERVICE_ACCOUNT_JSON" > /tmp/gcloud-key.json
+    export GOOGLE_APPLICATION_CREDENTIALS="/tmp/gcloud-key.json"
+
+    echo "[entrypoint] Authenticating using service account key..."
+    gcloud auth activate-service-account --key-file=/tmp/gcloud-key.json
+elif [ -f "/root/.config/gcloud/application_default_credentials.json" ]; then
+    # Local container
+    export GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
+elif [ -f "/app/secrets/f1penaltytool.json" ]; then
+    echo " No auto login credentials found. Resorting to secrets folder, if any."
+    export GOOGLE_APPLICATION_CREDENTIALS="/app/secrets/f1penaltytool.json"
+else
+    echo "ERROR: No credentials found"
+    exit 1
+fi
 
 gcsfuse --implicit-dirs --key-file=$GOOGLE_APPLICATION_CREDENTIALS $GCP_BUCKET /mnt/gcs_data
 echo 'GCP bucket mounted at /mnt/gcs_data'
 
-#mkdir -p /app/output
-#mount --bind /mnt/gcs_data/output   /app/output
-#mount --bind /mnt/gcs_data/output2   /app/output
-mount --bind /mnt/gcs_data/output3   /app/output
+mkdir -p /app/output
+mount --bind /mnt/gcs_data/output   /app/output
 
-mkdir -p /app/raw_pdfs
-mount --bind /mnt/gcs_data/raw_pdfs /app/raw_pdfs
+mkdir -p /app/input
+mount --bind /mnt/gcs_data/input    /app/input
 
 # Activate virtual environment
 echo "Activating virtual environment..."
