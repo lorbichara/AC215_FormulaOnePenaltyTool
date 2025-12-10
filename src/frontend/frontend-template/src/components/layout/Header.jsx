@@ -26,14 +26,20 @@ export default function Header() {
                 <div className="header-container">
                     <div className="header-content">
                         <Link href="/" className="header-logo">
-                            <Image
-                                src="/assets/logo.jpeg"
-                                alt="App Logo"
-                                width={32}
-                                height={32}
-                                className="w-8 h-8"
-                            />
-                            <h1 className="text-xl font-bold font-formulaone-wide tracking-tight">F1 Penalty Explainer</h1>
+                            <div className="flex items-center gap-3">
+                                <Image
+                                    src="/assets/New_era_F1_logo.png"
+                                    alt="F1 logo"
+                                    width={64}
+                                    height={24}
+                                    className="h-6 w-auto"
+                                    priority
+                                />
+                                <h1 className="text-xl font-bold tracking-tight font-formulaone-wide">
+                                    <span className="sr-only">F1 </span>
+                                    Penalty Explainer
+                                </h1>
+                            </div>
                         </Link>
 
                         <nav className="nav-desktop">

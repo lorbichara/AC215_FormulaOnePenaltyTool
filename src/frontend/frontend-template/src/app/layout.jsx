@@ -24,7 +24,7 @@ const formulaOneWide = localFont({
 });
 
 export const metadata = {
-    title: 'F1 Penalty Explainer',
+    title: 'Penalty Explainer',
     description: 'An application to analyze and understand Formula 1 penalties using historical data and official regulations.',
 }
 
