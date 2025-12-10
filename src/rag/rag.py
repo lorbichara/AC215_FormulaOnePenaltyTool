@@ -5,6 +5,8 @@ import glob
 import json
 import argparse
 from pypdf import PdfReader
+from urllib import request
+
 
 import pandas as pd
 
@@ -59,7 +61,7 @@ EMBED_DIM = 256
 DBG_LVL_HIGH = 2
 DBG_LVL_MED = 1
 DBG_LVL_LOW = 0
-global_debug_level = DBG_LVL_MED
+global_debug_level = DBG_LVL_HIGH
 
 
 def DEBUG(level, input_string):
@@ -83,6 +85,7 @@ ERROR_CODE_FILE_CORRUPTED = 3
 ERROR_CODE_ALREADY_CHUNKED = 4
 ERROR_CODE_CHROMADB_FAILED = 5
 ERROR_CODE_SPACY_FAILED = 6
+ERROR_CODE_INVALID_PARAM = 7
 
 HTTP_CODE_GENERIC_SUCCESS = 200
 HTTP_CODE_GENERIC_FAILURE = 400
@@ -116,7 +119,7 @@ chunk_skipped_set_orig = set()
 # =============================================================================
 #                                UTILITY FUNCTIONS
 # =============================================================================
-def remove_file(filepath):
+def delete_file(filepath):
     try:
         os.remove(filepath)
     except PermissionError:
@@ -126,7 +129,7 @@ def remove_file(filepath):
 
 
 def get_country_adjectives_map():
-    # 1. Generate the exhaustive ADJ_TO_COUNTRY_MAP using country-converter
+    # Generate the exhaustive Adjective to Country map using country-converter
     country_map = {}
     cc = country_converter.CountryConverter()
 
@@ -199,7 +202,6 @@ def create_country_params():
 
 
 def extract_countries_using_demonyms(text):
-
     extracted_locations = set()
 
     try:
@@ -377,19 +379,21 @@ def parse_metadata_from_text(text) -> dict:
 
     metadata = {}
 
-    # 1. Set document type
-    metadata["doc_type"] = "decision"
-    if "regulations" in text.lower():
-        metadata["doc_type"] = "regulation"
-        return metadata
-
     DEBUG(DBG_LVL_LOW, "Extracting Year")
-    # 2. Extract Year
+    # 1. Extract Year
     # year_match = re.match(r'(\d{4})', text)
-    year_match = re.search(r"\b\d{4}\b", text)
+    # year_match = re.search(r"\b\d{4}\b", text)
+    year_match = re.search(r"(?<!\d)\d{4}(?!\d)", text)
     if year_match:
         metadata["year"] = year_match.group(0)
         DEBUG(DBG_LVL_LOW, "year: " + str(year_match.group(0)))
+
+    # 2. Set document type
+    metadata["doc_type"] = "decision"
+    if "Driver" not in text and "regulations" in text.lower():
+        # NOTE: We are maintaining "Year" context for regulation too.
+        metadata["doc_type"] = "regulation"
+        return metadata
 
     DEBUG(DBG_LVL_LOW, "Extracting location")
     # 3. Extract location (Country, City, etc) from file name.
@@ -399,7 +403,7 @@ def parse_metadata_from_text(text) -> dict:
         DEBUG(DBG_LVL_LOW, "Location: " + location)
 
     DEBUG(DBG_LVL_LOW, "Extracting Car number")
-    # 4. Extract Car Number(s) from filename
+    # 4. Extract Car Number(s) from text
     all_involved_cars = extract_car_num_from_txt(text)
     DEBUG(DBG_LVL_LOW, "all_involved_cars: " + str(all_involved_cars))
 
@@ -411,6 +415,31 @@ def parse_metadata_from_text(text) -> dict:
         metadata["all_involved_cars"] = ", ".join(all_involved_cars)
 
     return metadata
+
+
+def init_globals():
+    global nlp
+    if nlp is not None:  # Already initialized.
+        return
+
+    # Load spacy's pre-trained English language processing pipeline.
+    try:
+        nlp = spacy.load("en_core_web_sm")
+        DEBUG(DBG_LVL_HIGH, "Spacy model loaded successfully.")
+    except OSError:
+        DEBUG(DBG_LVL_HIGH, "Spacy model not found. Downloading...")
+        try:
+            download("en_core_web_sm")
+            nlp = spacy.load("en_core_web_sm")
+            DEBUG(DBG_LVL_HIGH, "Model downloaded and loaded.")
+        except Exception as e:
+            DEBUG(DBG_LVL_HIGH, f"Spacy loading failed: {e}")
+            raise
+    except Exception as e:
+        DEBUG(DBG_LVL_HIGH, f"Spacy loading failed: {e}")
+        raise
+
+    create_country_params()
 
 
 # =============================================================================
@@ -484,12 +513,10 @@ def chunk_file(filepath, filename, json_folder, counter, metadata):
     if chunk_exists and embed_exists:  # File was already chunked and embedded
         return ERROR_CODE_ALREADY_CHUNKED
     else:
-        if chunk_exists:  # Delete the file and recreate it
+        if chunk_exists:
             # DEBUG(DBG_LVL_LOW, "Deleting: %s" % (chunk_jsonl))
-            # remove_file(chunk_jsonl)
+            # delete_file(chunk_jsonl)
             return ERROR_CODE_SUCCESS
-        if embed_exists:
-            assert True, "Invalid scenario"
 
     input_text = ""
     try:
@@ -523,24 +550,14 @@ def chunk_file(filepath, filename, json_folder, counter, metadata):
 
         # If "Car xxx" is still not found, this file can be skipped.
         if "car_num" not in metadata:
-            DEBUG(DBG_LVL_MED, "NO CAR FOUND. FILE: %s" + filepath)
+            DEBUG(DBG_LVL_MED, "CAR INFO NOT FOUND. FILE: %s" + filepath)
             return ERROR_CODE_FILE_SKIPPED
 
         # Find relevant markers in the input text.
         markers = find_markers(input_text)
-        if "Fact" not in markers.keys():
-            DEBUG(DBG_LVL_MED, "Input text")
-            DEBUG(DBG_LVL_MED, input_text)
-            DEBUG(DBG_LVL_MED, "NO FACT FOUND. FILE: %s" + filepath)
+        if "Fact" not in markers.keys() or "Reason" not in markers.keys():
+            DEBUG(DBG_LVL_MED, "NO PARAMETERS FOUND. FILE: %s" + filepath)
             return ERROR_CODE_FILE_SKIPPED
-
-        if "Reason" not in markers.keys():
-            DEBUG(DBG_LVL_MED, "Input text")
-            DEBUG(DBG_LVL_MED, input_text)
-            DEBUG(DBG_LVL_MED, "NO REASON FOUND. FILE: %s" + filepath)
-            return ERROR_CODE_FILE_SKIPPED
-
-        input_text = markers["Fact"] + " " + markers["Reason"]
 
     DEBUG(DBG_LVL_MED, "FILE COUNT-%d, CHUNKING: %s" % (counter, filepath))
 
@@ -549,7 +566,7 @@ def chunk_file(filepath, filename, json_folder, counter, metadata):
         chunk_size=CHUNK_SIZE, chunk_overlap=20, separators=["\n\n", "\n", " ", ""]
     )
 
-    # Perform the splitting
+    # Perform the chunking process.
     text_chunks = text_splitter.create_documents([input_text.lower()])
     text_chunks = [doc.page_content for doc in text_chunks]
     # DEBUG(DBG_LVL_LOW, "Number of chunks: %s" %len(text_chunks))
@@ -677,10 +694,10 @@ def chunk(tag, json_folder, limit):
             break
 
         filename = os.path.basename(file)
-        filename = os.path.splitext(filename)[0]
+        filename = os.path.splitext(filename)[0].lower()
 
-        # Create metadata only for the decision files.
         metadata = parse_metadata_from_text(filename)
+        DEBUG(DBG_LVL_LOW, f"File: '{filename}', metadata: " + str(metadata))
 
         retval = chunk_file(file, filename, json_folder, total_files, metadata)
 
@@ -731,6 +748,8 @@ def chunk(tag, json_folder, limit):
 
 def create_chunks(limit=sys.maxsize):
     DEBUG(DBG_LVL_LOW, "NUM FILES LIMIT: " + str(limit))
+
+    init_globals()
 
     # Ensure the destination directory exists
     assert os.path.exists(DATASET_DIR), DATASET_DIR + " does not exist"
@@ -789,7 +808,7 @@ def generate_embeddings(embed_model, chunks, batch_size=250):  # Max for Vertex 
     return all_embeds
 
 
-def embed(json_folder, file_limit):
+def embed(json_folder, file_limit=sys.maxsize):
     ret_val = ERROR_CODE_SUCCESS
 
     embed_model = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL)
@@ -855,6 +874,8 @@ def embed(json_folder, file_limit):
 def create_embeddings(file_limit=sys.maxsize):
     DEBUG(DBG_LVL_LOW, "EMBEDDING FILE LIMIT: " + str(file_limit))
 
+    init_globals()
+
     DEBUG(DBG_LVL_HIGH, "\nEmbedding for decision files start")
     ret_str, ret_val = embed(DECISION_JSON_DIR, int(file_limit))
     ret_str_1 = "Embedding for decision files done. \n" + ret_str + "\n"
@@ -880,9 +901,9 @@ def create_embeddings(file_limit=sys.maxsize):
 def store_text_embeddings(jsonl_file, target_collection, batch_size=500):
     filename = os.path.basename(jsonl_file)
     filename = os.path.splitext(filename)[0]
-    print("filename: " + filename)
+    DEBUG(DBG_LVL_MED, "filename: " + filename)
     base_metadata = parse_metadata_from_text(filename)
-    print("Metadata: " + str(base_metadata))
+    DEBUG(DBG_LVL_LOW, "Metadata: " + str(base_metadata))
 
     ids, embeddings, documents, metadatas = [], [], [], []
     with open(jsonl_file, "r") as f:
@@ -987,6 +1008,8 @@ def store(
 
 
 def store_embeddings(testing=False):
+    init_globals()
+
     DEBUG(DBG_LVL_HIGH, "\nStoring of embeddings of decision files in Chromadb start")
     jsonl_file_list, jsonl_file_names = find_embed_files(DECISION_JSON_DIR)
     ret_str, ret_val = store(
@@ -1023,19 +1046,156 @@ def store_embeddings(testing=False):
 # ==============================================================================
 #                             QUERY THE RAG SYSTEM
 # ==============================================================================
+def download_file(url, download_loc):
+    try:
+        request.urlretrieve(url, download_loc)
+        print(f"Download complete to: {download_loc}")
+    except Exception as e:
+        print(f"An error occurred during download: {e}")
+
+
+def extract_url_and_filename(input_text):
+    url = None
+    filename = None
+    download_loc = None
+    text = input_text.strip()
+
+    # Regex Pattern to find a URL
+    url_pattern = r"https?://[^\s]+"
+    # Search for the URL
+    url_match = re.search(url_pattern, input_text)
+
+    if url_match:
+        # Extract weblink from the text
+        url = url_match.group(0)
+
+        # Extract remaining text
+        text = input_text.replace(url, "").strip()
+
+        # Find the base name of the PDF file.
+        filename = os.path.basename(url)
+        filename = os.path.splitext(filename)[0].lower()
+
+        download_loc = "/tmp/" + filename
+        if os.path.exists(download_loc):
+            DEBUG(DBG_LVL_LOW, f"{download_loc} already exists")
+        else:
+            download_file(url, download_loc)
+
+    print("\n--------")
+    print("CHECK ME")
+    print("--------")
+    print("url: " + str(url))
+    print("download_loc: " + str(download_loc))
+    print("\n")
+
+    return text, filename, download_loc
+
+
+def create_user_query(metadata):
+    user_query = (
+        "Is the penalty for car "
+        + metadata["car_num"]
+        + " infringement in "
+        + metadata["year"]
+        + " "
+        + metadata["location"]
+        + " Grand Prix a fair one?"
+    )
+
+    return user_query
+
+
+def preprocess_query(user_query):
+    ret_val = ERROR_CODE_SUCCESS
+    user_query = user_query.lower()
+
+    text, filename, download_loc = extract_url_and_filename(user_query)
+    # NOTE: As per current approach, 'text' is discarded.
+
+    metadata = None
+    if download_loc is not None:
+        assert filename is not None
+        assert text is not None
+
+        text_to_process = ""
+        try:
+            pdf_reader = PdfReader(download_loc)
+            for page in pdf_reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    page_text = page_text.replace("\n", " ") + " "
+                    page_text = page_text.replace("\u00a0", " ")
+                    page_text = page_text.replace("\u2013", " ")
+
+                    text_to_process += page_text
+
+            # Collapse any sequence of one or more spaces into a single space
+            text_to_process = re.sub(" +", " ", text_to_process).strip()
+
+            # Extract metadata from file content.
+            metadata = parse_metadata_from_text(text_to_process)
+
+            # STEP-1: Chunk the file.
+            # Remove "_" if any. This is to check if the given file is already in our database.
+            filename = filename.replace("_", " ").lower()
+            retval = chunk_file(download_loc, filename, DECISION_JSON_DIR, 1, metadata)
+            if ERROR_CODE_SUCCESS == retval:
+                DEBUG(DBG_LVL_MED, f"->CHUNKED: {download_loc}")
+
+                # STEP-2: Embed the chunk file.
+                ret_str, ret_val = embed(DECISION_JSON_DIR)
+                DEBUG(DBG_LVL_MED, "Embedding for decision files done.")
+                if retval == ERROR_CODE_GCS_FAILURE:
+                    return ret_val, None
+
+                # STEP-3: Store the embeddings file
+                ret_str, ret_val = store_embeddings(False)
+                if retval != ERROR_CODE_SUCCESS:
+                    return ret_val, None
+
+            elif ERROR_CODE_ALREADY_CHUNKED == retval:
+                DEBUG(DBG_LVL_MED, f"->ALREADY CHUNKED: {download_loc}")
+            elif ERROR_CODE_FILE_SKIPPED == retval:
+                DEBUG(DBG_LVL_MED, f"->SKIPPED: {download_loc}")
+                return ERROR_CODE_INVALID_PARAM, None
+            elif ERROR_CODE_FILE_CORRUPTED == retval:
+                DEBUG(DBG_LVL_MED, f"->CORRUPTED or NOT ACCESSIBLE: {download_loc}")
+                return ERROR_CODE_INVALID_PARAM, None
+            else:
+                assert True, "Unknown error: " + str(retval)
+
+        except Exception as e:
+            DEBUG(DBG_LVL_MED, f"Invalid weblink {download_loc}: {e}")
+            return ERROR_CODE_INVALID_PARAM, None
+    else:
+        # No web link. Just text.
+        metadata = parse_metadata_from_text(user_query)
+
+    return ret_val, metadata
+
+
 def query(user_query, llm_choice: str = PARAM_GOOGLE_LLM):
     ret_val = ERROR_CODE_SUCCESS
 
-    user_query = user_query.lower()
+    init_globals()
 
-    # STEP-1: Instantiate a pretrained model.
+    # STEP-1: Preprocess the user query.
+    ret_val, query_metadata = preprocess_query(user_query)
+    if ret_val is not ERROR_CODE_SUCCESS:
+        return "Invalid parameters", ret_val
+
+    recreated_query = create_user_query(query_metadata)
+    DEBUG(DBG_LVL_LOW, "User query: " + recreated_query)
+    DEBUG(DBG_LVL_LOW, "Query metadata: " + str(query_metadata))
+
+    # STEP-2: Instantiate a pretrained model.
     embed_model = TextEmbeddingModel.from_pretrained(EMBEDDING_MODEL)
 
-    # STEP-2: Create embeddings for the user query.
-    DEBUG(DBG_LVL_LOW, "Query: %s" % user_query)
+    # STEP-3: Create embeddings for the user query.
     try:
         embeddings = embed_model.get_embeddings(
-            [user_query], output_dimensionality=EMBED_DIM
+            [recreated_query], output_dimensionality=EMBED_DIM
         )
     except Exception as e:
         ret_str = f"Failed to generate embeddings. Last error: {str(e)}"
@@ -1043,17 +1203,15 @@ def query(user_query, llm_choice: str = PARAM_GOOGLE_LLM):
         return ret_str, ERROR_CODE_GCS_FAILURE
 
     query_embedding = embeddings[0].values
-    DEBUG(DBG_LVL_LOW, "Query embeddings: " + str(query_embedding))
+    # DEBUG(DBG_LVL_LOW, "\nQuery embeddings: \n" + str(query_embedding))
 
-    # STEP-3: Connect to chroma DB
+    # STEP-4: Connect to chroma DB
     client = chromadb.HttpClient(host=CHROMADB_HOST, port=CHROMADB_PORT)
 
-    # STEP-4: Retrieve similar past decisions.
-    #  STEP-4.1 Extract metadata from user query.
-    query_metadata = parse_metadata_from_text(user_query)
-    print("Query metadata: " + str(query_metadata))
+    # STEP-5: RETRIEVE SPECIFIC CASE THAT IS ASKED IN QUERY.
+    primary_car = query_metadata["car_num"]
 
-    #  STEP-4.2 Convert extracted metadata into a ChromaDB 'where' filter
+    #  5.1 Convert extracted metadata into a ChromaDB 'where' filter
     decision_filter = {"$and": []}
     if "location" in query_metadata:
         decision_filter["$and"].append({"location": query_metadata["location"]})
@@ -1062,13 +1220,15 @@ def query(user_query, llm_choice: str = PARAM_GOOGLE_LLM):
     if "car_num" in query_metadata:
         decision_filter["$and"].append({"car_num": query_metadata["car_num"]})
 
-    #  STEP-4.3 Apply filter only if car number is known.
+    #  STEP-5.2 Apply filter only if car number is known.
     target_filter = None
     if decision_filter["$and"]:
         # If there are filters, use the $and clause
         target_filter = decision_filter
-    DEBUG(DBG_LVL_LOW, "target_filter: " + str(target_filter))
+    DEBUG(DBG_LVL_LOW, "target_filter for specific car case: " + str(target_filter))
 
+    #  5.2 Query from ChromaDB collection.
+    target_context = []
     try:
         dec_collection = client.get_collection(name=DECISIONS_COLLECTION)
     except Exception:
@@ -1076,14 +1236,49 @@ def query(user_query, llm_choice: str = PARAM_GOOGLE_LLM):
         DEBUG(DBG_LVL_HIGH, ret_str)
         return ret_str, ERROR_CODE_CHROMADB_FAILED
 
-    results_decision = dec_collection.query(
+    target_results = dec_collection.query(
         query_embeddings=[query_embedding],
         n_results=5,
         include=["documents", "metadatas"],
-        where=target_filter,  # METADATA FILTER APPLIED HERE
+        where=target_filter,  # METADATA FILTER
     )
+    # Compile context, prioritizing the first result
+    for doc, meta in zip(
+        target_results["documents"][0], target_results["metadatas"][0]
+    ):
+        target_context.append(f"{doc}")
+    # STEP-5 TILL HERE: -------------------------
 
-    # STEP-5: Retrieve relevant regulations.
+    # STEP-6: RETRIEVE HISTORICAL PRECEDENTS.
+    try:
+        dec_collection = client.get_collection(name=DECISIONS_COLLECTION)
+    except Exception:
+        ret_str = f"Collection '{DECISIONS_COLLECTION}' does not exist."
+        DEBUG(DBG_LVL_HIGH, ret_str)
+        return ret_str, ERROR_CODE_CHROMADB_FAILED
+
+    broad_results = dec_collection.query(
+        query_embeddings=[query_embedding],
+        n_results=10,
+        include=["documents", "metadatas"],
+    )
+    # Filter the broad results in Python for relevance/uniqueness
+    historical_context = []
+    seen_ids = set()
+    for doc, meta in zip(broad_results["documents"][0], broad_results["metadatas"][0]):
+        doc_id = meta.get("chunk_id") or doc
+        if doc_id not in seen_ids and doc not in target_context:
+            historical_context.append(
+                f"Car {meta.get('car_num', 'Unknown')} ---\n{doc}"
+            )
+            seen_ids.add(doc_id)
+            # Limit precedents to 4.
+            if len(historical_context) >= 4:
+                break
+    # STEP-6 TILL HERE: -------------------------
+
+    # STEP-7: RETRIEVE RELEVANT REGULATIONS.
+    # Attempt to retrieve year specific regulations.
     try:
         reg_collection = client.get_collection(name=REGULATIONS_COLLECTION)
     except Exception:
@@ -1091,38 +1286,74 @@ def query(user_query, llm_choice: str = PARAM_GOOGLE_LLM):
         DEBUG(DBG_LVL_HIGH, ret_str)
         return ret_str, ERROR_CODE_CHROMADB_FAILED
 
-    results_regulation = reg_collection.query(
-        query_embeddings=[query_embedding],
-        n_results=3,
-    )
+    regulation_filter = None
+    if "year" in query_metadata:
+        regulation_filter = {"year": query_metadata["year"]}
+        DEBUG(DBG_LVL_LOW, "regulation_filter: " + str(regulation_filter))
 
-    # STEP-6: Create input for LLM.
+    results_regulation = reg_collection.query(
+        query_embeddings=[query_embedding], n_results=3, where=regulation_filter
+    )
+    regulation_context = [f"\n{doc}" for doc in results_regulation["documents"][0]]
+    # STEP-7 TILL HERE: -------------------------
+
+    # STEP-8: Create input for LLM.
     prompt_template = f"""
-    Question:
-    {user_query}
+    User query:
+    {recreated_query}
+
+    You are an expert FIA Steward and Analyst. Your goal is to provide a comprehensive fairness
+    assessment based on the user query and the provided context.
+
+    **CONTEXT:**
+    The context is organized into three sections:
+    SPECIFIC CASE (the incident under review), HISTORICAL PRECEDENT (past similar cases), and REGULATION EXCERPT.
+
+    SPECIFIC CONTEXT:
+    {target_context}
+
+    HISTORICAL CONTEXT (past similar cases):
+    {historical_context}
 
     Relevant FIA Sporting Regulations:
-    {results_regulation}
+    {regulation_context}
 
-    Relevant historical decisions for comparison:
-    {results_decision}
+    Perform the following tasks.
+    TASK-1:  Use heading as **INFRINGEMENT, PENALTY & REGULATIONS:**
 
-    Perform symantic similarity of the user query against results_decisions and results_regulations and
-    perform the following tasks.
+    Create sub-heading as **Infringement**:
+    Action: Provide a clear, user-friendly explanation of the infringement committed
+    by Car {primary_car or 'N/A'}
 
-    TASKS:
-    1. Provide a clear explanation of the infringement and what the regulation
-       requires.
-    2. Compare the penalty with past similar penalties.
-    3. Assess whether the penalty is fair compared to precedent.
-    4. Highlight patterns or inconsistencies.
+    Create sub-heading as **Penalty**:
+    Provide short description of penalty impose
 
-    Explain each task in a simple and concise manner.
-    Make the headings of the output of each task as CAPITAL LETTERS.
-    Convert text into lowercase if it provides better accuracy.
+    Create sub-heading as **Regulation**:
+    Cite the regulation that is violated.
 
-    If the answer is not in the context, say you cannot answer based on the
-    information provided.
+    TASK-2: Use heading as **COMPARISON TO PAST SIMILAR PENALTIES:**
+    Action: Detail the penalty received by Car {primary_car or 'N/A'} and
+    compare it directly to the penalties and rationale found in the HISTORICAL PRECEDENT section.
+
+    TASK-3. Use heading as **FAIRNESS ASSESSMENT:**
+    Action: Assess whether the penalty for Car {primary_car or 'N/A'} is fair compared to
+    precedent, justifying your conclusion with evidence from the provided context.
+
+    TASK-4. Use heading as **PATTERNS & INCONSISTENCIES:**
+    Action: Highlight any patterns (e.g., stricter penalties for repeat offenses, or
+    trends over years) or notable inconsistencies in the application of penalties found in the context.
+
+    Explain each taks in a simple and concise manner.
+
+    If the provided information is not enough, check if you can find information from publicly available
+    data online.
+    If you are answering using publicly availably data online and not the provided data, then quote that public
+    informtion in a short and concise manner.
+
+    If the answer is not in the context provided, you can say that the answer provided is outside of the
+    provided contest.
+
+    Keep the line width to 100 characters.
     """
     DEBUG(DBG_LVL_HIGH, prompt_template)
 
@@ -1152,25 +1383,6 @@ def query(user_query, llm_choice: str = PARAM_GOOGLE_LLM):
 
 
 def main(args=None):
-    create_country_params()
-
-    # Load spacy's pre-trained English language processing pipeline.
-    global nlp
-    try:
-        nlp = spacy.load("en_core_web_sm")
-        print("Spacy model loaded successfully.")
-    except OSError:
-        print("Model not found. Downloading...")
-        try:
-            download("en_core_web_sm")
-            nlp = spacy.load("en_core_web_sm")
-            print("Model downloaded and loaded.")
-        except Exception as e:
-            ret_str = f"Spacy loading failed: {e}"
-            return ret_str, ERROR_CODE_SPACY_FAILED
-    except Exception as e:
-        ret_str = f"Spacy loading failed: {e}"
-        return ret_str, ERROR_CODE_SPACY_FAILED
 
     if args.all:
         create_chunks()

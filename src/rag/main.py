@@ -4,13 +4,15 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.middleware.cors import CORSMiddleware
+from enum import Enum
+
+
+class LLMModel(str, Enum):
+    gemini_default = "gemini-default"
+    gemini_finetuned = "gemini-finetuned"
+
 
 import rag as rag
-
-
-PARAM_GOOGLE_LLM = "gemini-default"
-PARAM_FINE_TUNED = "gemini-finetuned"
-
 
 UVICORN_PORT = os.environ["UVICORN_PORT"]
 
@@ -70,9 +72,9 @@ async def store_embeddings(testing: bool):
 
 
 @app.get("/query/")
-async def query_llm(prompt: str, llm_choice: str = PARAM_GOOGLE_LLM):
+async def query_llm(prompt: str, llm_choice: LLMModel = LLMModel.gemini_default):
 
-    ret_str, ret_val = rag.query(prompt, llm_choice)
+    ret_str, ret_val = rag.query(prompt, llm_choice.value)
 
     if ret_val == rag.HTTP_CODE_GENERIC_SUCCESS:
         return JSONResponse(content={"response": ret_str}, status_code=ret_val)
