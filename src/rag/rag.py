@@ -129,7 +129,6 @@ def chunk_file(filepath, filename, json_folder, counter):
             assert True, "Invalid scenario"
 
     DEBUG(DBG_LVL_LOW, "CHUNKING: %s, FILE COUNT-%d" % (filepath, counter))
-    return ERROR_CODE_SUCCESS
 
     input_text = ""
     try:
@@ -466,7 +465,14 @@ def query(user_query, llm_choice: str = PARAM_GOOGLE_LLM):
     try:
         dec_collection = client.get_collection(name=DECISIONS_COLLECTION)
     except Exception:
-        ret_str = f"Collection '{DECISIONS_COLLECTION}' does not exist."
+        ret_str = f"Collection '{DECISIONS_COLLECTION}' does not exist. Please run the data pipeline (chunk -> embed -> store) to populate the database."
+        DEBUG(DBG_LVL_HIGH, ret_str)
+        return ret_str, ERROR_CODE_CHROMADB_FAILED
+
+    # Check if collection is empty
+    collection_count = dec_collection.count()
+    if collection_count == 0:
+        ret_str = f"Collection '{DECISIONS_COLLECTION}' is empty. Please run the data pipeline (chunk -> embed -> store) to populate the database."
         DEBUG(DBG_LVL_HIGH, ret_str)
         return ret_str, ERROR_CODE_CHROMADB_FAILED
 
@@ -480,14 +486,33 @@ def query(user_query, llm_choice: str = PARAM_GOOGLE_LLM):
     try:
         reg_collection = client.get_collection(name=REGULATIONS_COLLECTION)
     except Exception:
-        ret_str = f"Collection '{REGULATIONS_COLLECTION}' does not exist."
+        DEBUG(DBG_LVL_MED, f"Collection '{REGULATIONS_COLLECTION}' does not exist. Continuing with decisions only.")
+        results_regulation = {"documents": [[]]}  # Empty results
+    else:
+        # Check if collection is empty
+        collection_count = reg_collection.count()
+        if collection_count == 0:
+            DEBUG(DBG_LVL_MED, f"Collection '{REGULATIONS_COLLECTION}' is empty. Continuing with decisions only.")
+            results_regulation = {"documents": [[]]}  # Empty results
+        else:
+            results_regulation = reg_collection.query(
+                query_embeddings=[query_embedding],
+                n_results=10,
+            )
+
+    # Check if query results are empty
+    decision_docs = results_decision.get("documents", [])
+    regulation_docs = results_regulation.get("documents", [])
+    
+    # ChromaDB returns documents as a list of lists (one list per query embedding)
+    # Check if both are empty or contain no actual documents
+    has_decisions = decision_docs and len(decision_docs) > 0 and len(decision_docs[0]) > 0
+    has_regulations = regulation_docs and len(regulation_docs) > 0 and len(regulation_docs[0]) > 0
+    
+    if not has_decisions and not has_regulations:
+        ret_str = "No relevant documents found in the database. The collections may be empty or the query did not match any documents. Please ensure the data pipeline has been run successfully."
         DEBUG(DBG_LVL_HIGH, ret_str)
         return ret_str, ERROR_CODE_CHROMADB_FAILED
-
-    results_regulation = reg_collection.query(
-        query_embeddings=[query_embedding],
-        n_results=10,
-    )
 
     # STEP-6: Create input for LLM.
     prompt_template = f"""
