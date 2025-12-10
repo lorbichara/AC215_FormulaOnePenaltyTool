@@ -33,14 +33,9 @@ jobs:
 
       - name: Start container in background
         env:
-          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+          GITHUB_ACTIONS: ${{ github.actions }}
+          GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON}}
         run: |
-          echo "GCP_SERVICE_ACCOUNT_JSON set for docker-compose."
-          echo $GCP_SERVICE_ACCOUNT_JSON
-
-          echo "secrets.GCP_SERVICE_ACCOUNT_JSON"
-          echo ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
-
           docker compose up -d
 
       - name: Wait for server to be ready
@@ -57,7 +52,7 @@ jobs:
 
       - name: Run Flake8 linter
         run: |
-          docker exec rag /.venv/bin/flake8 --max-line-length=160  --extend-ignore=E203,W503,E402 src/
+          docker exec rag /.venv/bin/flake8 --max-line-length=140  --extend-ignore=E203,W503,E402 src/
         continue-on-error: true
 
       - name: Run integration tests

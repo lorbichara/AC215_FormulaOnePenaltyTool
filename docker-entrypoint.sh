@@ -47,21 +47,23 @@ cd /app
 mkdir -p "$OUTPUT_DIR/decision_jsons" "$OUTPUT_DIR/regulation_jsons"
 
 # Check if embedding files exist
-if find "$OUTPUT_DIR/decision_jsons" "$OUTPUT_DIR/regulation_jsons" -name "embeddings-*.jsonl" 2>/dev/null | grep -q .; then
-    echo "Found embedding files. Running store embeddings..."
-    uv run python src/rag/rag.py --store || echo "Warning: Store embeddings failed. Continuing..."
-else
-    echo "No embedding files found. Attempting to copy from GCS..."
-    # Copy embedding files from GCS using gsutil (fallback if gcsfuse mount doesn't show files)
-    gsutil -m cp gs://f1penaltydocs/output/decision_jsons/embeddings-*.jsonl "$OUTPUT_DIR/decision_jsons/" 2>/dev/null || echo "No decision embedding files in GCS"
-    gsutil -m cp gs://f1penaltydocs/output/regulation_jsons/embeddings-*.jsonl "$OUTPUT_DIR/regulation_jsons/" 2>/dev/null || echo "No regulation embedding files in GCS"
-    
-    # Try store again after copying
+if [ "$GITHUB_ACTIONS" = "false" ]; then
     if find "$OUTPUT_DIR/decision_jsons" "$OUTPUT_DIR/regulation_jsons" -name "embeddings-*.jsonl" 2>/dev/null | grep -q .; then
-        echo "Files copied from GCS. Running store embeddings..."
+        echo "Found embedding files. Running store embeddings..."
         uv run python src/rag/rag.py --store || echo "Warning: Store embeddings failed. Continuing..."
     else
-        echo "No embedding files found after GCS copy attempt. Skipping store step."
+        echo "No embedding files found. Attempting to copy from GCS..."
+        # Copy embedding files from GCS using gsutil (fallback if gcsfuse mount doesn't show files)
+        gsutil -m cp gs://f1penaltydocs/output/decision_jsons/embeddings-*.jsonl "$OUTPUT_DIR/decision_jsons/" 2>/dev/null || echo "No decision embedding files in GCS"
+        gsutil -m cp gs://f1penaltydocs/output/regulation_jsons/embeddings-*.jsonl "$OUTPUT_DIR/regulation_jsons/" 2>/dev/null || echo "No regulation embedding files in GCS"
+    
+        # Try store again after copying
+        if find "$OUTPUT_DIR/decision_jsons" "$OUTPUT_DIR/regulation_jsons" -name "embeddings-*.jsonl" 2>/dev/null | grep -q .; then
+            echo "Files copied from GCS. Running store embeddings..."
+            uv run python src/rag/rag.py --store || echo "Warning: Store embeddings failed. Continuing..."
+        else
+            echo "No embedding files found after GCS copy attempt. Skipping store step."
+        fi
     fi
 fi
 

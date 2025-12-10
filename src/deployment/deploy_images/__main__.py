@@ -21,42 +21,56 @@ artifact_registry_repo = artifactregistry.Repository(
     location=location,
     repository_id=repository_name,
     format="docker",
-    description="Docker repository for F1 Penalty Tool application"
+    description="Docker repository for F1 Penalty Tool application",
 )
 
 # Docker Build + Push -> Main F1 Penalty Tool App
 image_config = {
     "image_name": "f1penalty-app",
     "context_path": "/project-root",  # Mounted project root
-    "dockerfile": "Dockerfile"
+    "dockerfile": "Dockerfile",
 }
 f1penalty_app_image = docker_build.Image(
     f"build-{image_config['image_name']}",
-    tags=[pulumi.Output.concat(registry_url, "/", image_config["image_name"], ":", timestamp_tag)],
+    tags=[
+        pulumi.Output.concat(
+            registry_url, "/", image_config["image_name"], ":", timestamp_tag
+        )
+    ],
     context=docker_build.BuildContextArgs(location=image_config["context_path"]),
     dockerfile={"location": "/project-root/Dockerfile"},
     platforms=[docker_build.Platform.LINUX_AMD64],
     push=True,
-    opts=pulumi.ResourceOptions(custom_timeouts=CustomTimeouts(create="30m"),
-                                retain_on_delete=True,
-                                depends_on=[artifact_registry_repo])
+    opts=pulumi.ResourceOptions(
+        custom_timeouts=CustomTimeouts(create="30m"),
+        retain_on_delete=True,
+        depends_on=[artifact_registry_repo],
+    ),
 )
 # Docker Build + Push -> Frontend App
 frontend_config = {
     "image_name": "f1penalty-frontend",
     "context_path": "/project-root/src/frontend/frontend-template",
-    "dockerfile": "Dockerfile"
+    "dockerfile": "Dockerfile",
 }
 f1penalty_frontend_image = docker_build.Image(
     f"build-{frontend_config['image_name']}",
-    tags=[pulumi.Output.concat(registry_url, "/", frontend_config["image_name"], ":", timestamp_tag)],
+    tags=[
+        pulumi.Output.concat(
+            registry_url, "/", frontend_config["image_name"], ":", timestamp_tag
+        )
+    ],
     context=docker_build.BuildContextArgs(location=frontend_config["context_path"]),
-    dockerfile={"location": f"{frontend_config['context_path']}/{frontend_config['dockerfile']}"},
+    dockerfile={
+        "location": f"{frontend_config['context_path']}/{frontend_config['dockerfile']}"
+    },
     platforms=[docker_build.Platform.LINUX_AMD64],
     push=True,
-    opts=pulumi.ResourceOptions(custom_timeouts=CustomTimeouts(create="30m"),
-                                retain_on_delete=True,
-                                depends_on=[artifact_registry_repo])
+    opts=pulumi.ResourceOptions(
+        custom_timeouts=CustomTimeouts(create="30m"),
+        retain_on_delete=True,
+        depends_on=[artifact_registry_repo],
+    ),
 )
 
 # Export references to stack

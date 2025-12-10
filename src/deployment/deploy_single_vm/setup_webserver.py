@@ -52,15 +52,15 @@ http {
     upstream f1penalty_app {
         server f1penalty-app:9000;
     }
-    
+
     upstream frontend {
         server frontend:3000;
     }
-    
+
     server {
         listen 80;
         server_name _;
-        
+
         # API requests go to the backend
         location /api {
             rewrite ^/api(.*)$ $1 break;
@@ -80,7 +80,7 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
-        
+
         # Everything else goes to the frontend
         location / {
             proxy_pass http://frontend;
@@ -95,7 +95,7 @@ http {
     }
 }
 EOF
-            
+
             sudo chmod 0644 /conf/nginx/nginx.conf
         """,
         opts=ResourceOptions(depends_on=[create_nginx_conf_dir]),

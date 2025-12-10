@@ -1,6 +1,8 @@
 .DS_Store
 
 # all data files
+secrets
+
 src/datapipeline/data/
 src/rag/input
 src/rag/output

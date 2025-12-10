@@ -131,13 +131,14 @@ def setup_containers(connection, configure_docker, project, instance_ip, ssh_use
             "OUTPUT_DIR=/mnt/disk-1/persistent",
         ],
         command=[
-            "/bin/bash", "-c", 
+            "/bin/bash",
+            "-c",
             """
             gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS &&
             gcsfuse --implicit-dirs --key-file=$GOOGLE_APPLICATION_CREDENTIALS $GCP_BUCKET /mnt/gcs_data &&
             cd /app &&
             uv run uvicorn main:app --host 0.0.0.0 --port $UVICORN_PORT
-            """
+            """,
         ],
         volumes=[
             docker.ContainerVolumeArgs(

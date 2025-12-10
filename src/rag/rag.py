@@ -61,7 +61,7 @@ EMBED_DIM = 256
 DBG_LVL_HIGH = 2
 DBG_LVL_MED = 1
 DBG_LVL_LOW = 0
-global_debug_level = DBG_LVL_MED
+global_debug_level = DBG_LVL_HIGH
 
 
 def DEBUG(level, input_string):
@@ -902,7 +902,7 @@ def create_embeddings(file_limit=sys.maxsize):
 def store_text_embeddings(jsonl_file, target_collection, batch_size=500):
     filename = os.path.basename(jsonl_file)
     filename = os.path.splitext(filename)[0]
-    DEBUG(DBG_LVL_MED, "filename: " + filename)
+    DEBUG(DBG_LVL_LOW, "filename: " + filename)
     base_metadata = parse_metadata_from_text(filename)
     DEBUG(DBG_LVL_LOW, "Metadata: " + str(base_metadata))
 
@@ -937,7 +937,10 @@ def store_text_embeddings(jsonl_file, target_collection, batch_size=500):
         target_collection.add(
             embeddings=embeddings, documents=documents, metadatas=metadatas, ids=ids
         )
-        print(f"Loaded {len(ids)} embeddings into ChromaDB from '{filename}'\n")
+        DEBUG(
+            DBG_LVL_MED,
+            f"Loaded {len(ids)} embeddings into ChromaDB from '{filename}'\n",
+        )
     except Exception as e:
         DEBUG(DBG_LVL_HIGH, f"ChromaDB store failed. Error: {str(e)}")
         raise
