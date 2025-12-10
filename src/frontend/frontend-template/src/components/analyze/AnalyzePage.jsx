@@ -1,24 +1,26 @@
 'use client';
 
 import { useState } from 'react';
-import PenaltyUploader from './PenaltyUploader';
-import AnalysisResult from './AnalysisResult';
+import IncidentInput from './IncidentInput';
+import LoadingLights from './LoadingLights';
+import AnalysisDashboard from './AnalysisDashboard';
 import { analyzePenalty } from '@/lib/DataService';
-import { Progress } from '@/components/ui/progress';
+import { Button } from '@/components/ui/button';
+import { AlertCircle } from 'lucide-react';
 
 export default function AnalyzePage() {
     const [analysisResult, setAnalysisResult] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    const handleAnalyze = async (file) => {
+    const handleAnalyze = async (incidentText) => {
         setIsLoading(true);
         setError(null);
         try {
-            const result = await analyzePenalty(file);
+            const result = await analyzePenalty(incidentText);
             setAnalysisResult(result);
         } catch (err) {
-            setError('An error occurred during analysis.');
+            setError('We could not reach the analysis service. Please try again.');
         } finally {
             setIsLoading(false);
         }
@@ -29,20 +31,42 @@ export default function AnalyzePage() {
     };
 
     return (
-        <div className="container mx-auto px-4 py-8">
-            {!analysisResult && !isLoading && (
-                <PenaltyUploader onAnalyze={handleAnalyze} isLoading={isLoading} />
-            )}
-            {isLoading && (
-                <div className="flex flex-col items-center justify-center">
-                    <p className="mb-4">Analyzing document...</p>
-                    <Progress value={null} className="w-1/2" />
+        <div className="min-h-screen bg-background">
+            <div className="container mx-auto px-4 py-10 space-y-10">
+                <div className="flex flex-col gap-2 text-center">
+                    <p className="text-sm uppercase tracking-[0.35em] text-muted-foreground font-heading">Penalty Analyzer</p>
+                    <h1 className="text-4xl md:text-5xl font-heading font-bold text-foreground">
+                        Race Control Decision Desk
+                    </h1>
+                    <p className="text-muted-foreground max-w-3xl mx-auto">
+                        Merge of our steward UI with the latest dashboard styling. Paste incident context to get a fairness read,
+                        regulation citations, and similar precedents while keeping the current project fonts.
+                    </p>
                 </div>
-            )}
-            {error && <p className="text-destructive">{error}</p>}
-            {analysisResult && !isLoading && (
-                <AnalysisResult result={analysisResult} onReset={handleReset} />
-            )}
+
+                <IncidentInput onAnalyze={handleAnalyze} isAnalyzing={isLoading} />
+
+                {error && (
+                    <div className="flex items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-destructive">
+                        <AlertCircle className="h-5 w-5" />
+                        <span>{error}</span>
+                        <Button variant="ghost" size="sm" onClick={() => setError(null)} className="ml-auto text-destructive">
+                            Dismiss
+                        </Button>
+                    </div>
+                )}
+
+                {isLoading && <LoadingLights />}
+
+                {analysisResult && !isLoading && (
+                    <div className="space-y-4">
+                        <div className="flex justify-end">
+                            <Button variant="outline" onClick={handleReset}>Analyze another incident</Button>
+                        </div>
+                        <AnalysisDashboard result={analysisResult} />
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
