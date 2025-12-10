@@ -12,9 +12,9 @@ class LLMModel(str, Enum):
     gemini_finetuned = "gemini-finetuned"
 
 
-import rag as rag
+import rag
 
-UVICORN_PORT = os.environ["UVICORN_PORT"]
+UVICORN_PORT = os.environ.get("UVICORN_PORT", "9000")
 
 # Setup FastAPI app
 app = FastAPI(title="API Server", description="API Server", version="v1")

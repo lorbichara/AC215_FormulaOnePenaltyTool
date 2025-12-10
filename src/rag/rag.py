@@ -147,7 +147,7 @@ def get_country_adjectives_map():
             country = CountryInfo(country_name)
             demonyms = country.demonym()
         except Exception as e:
-            print(f"An unexpected error occurred: {e}")
+            # print(f"An unexpected error occurred: {e}")
             continue
 
         # The output might be a single string or a list (for countries with multiple)
@@ -913,11 +913,20 @@ def store_text_embeddings(jsonl_file, target_collection, batch_size=500):
             # Combine base metadata with chunk-specific metadata
             chunk_metadata = base_metadata.copy()
             # Store original filename and chunk index for traceability
-            chunk_metadata["chunk_id"] = record["id"]
+            # Handle both old format (file/chunk) and new format (id/text)
+            if "id" in record:
+                record_id = record["id"]
+                record_text = record["text"]
+            else:
+                # Use file name + index to ensure unique IDs
+                base_id = record.get("file", f"unknown_{len(ids)}")
+                record_id = f"{base_id}_{len(ids)}"  # Add index to make it unique
+                record_text = record.get("chunk", "")
 
-            ids.append(record["id"])
+            chunk_metadata["chunk_id"] = record_id
+            ids.append(record_id)
             embeddings.append(record["embedding"])
-            documents.append(record["text"])
+            documents.append(record_text)
             metadatas.append(chunk_metadata)
 
     try:
@@ -976,6 +985,16 @@ def store(
         pass
 
     # Create a brand new collection.
+    # Get or create collection, then clear it if it has data
+    try:
+        collection = client.get_collection(name=target_collection)
+        # Collection exists, delete it to start fresh
+        client.delete_collection(name=target_collection)
+    except Exception:
+        # Collection doesn't exist, which is fine
+        pass
+
+    # Create a brand new collection
     collection = client.create_collection(
         name=target_collection, metadata={"hnsw:space": "cosine"}
     )
@@ -1093,15 +1112,20 @@ def extract_url_and_filename(input_text):
 
 
 def create_user_query(metadata):
-    user_query = (
-        "Is the penalty for car "
-        + metadata["car_num"]
-        + " infringement in "
-        + metadata["year"]
-        + " "
-        + metadata["location"]
-        + " Grand Prix a fair one?"
-    )
+    car_num = metadata.get("car_num", "N/A")
+    year = metadata.get("year", "")
+    location = metadata.get("location", "")
+
+    parts = []
+    if car_num and car_num != "N/A":
+        parts.append(f"car {car_num}")
+    if year:
+        parts.append(year)
+    if location:
+        parts.append(f"{location} Grand Prix")
+
+    context = " ".join(parts) if parts else "the case"
+    user_query = f"Is the penalty for {context} a fair one?"
 
     return user_query
 
@@ -1209,7 +1233,7 @@ def query(user_query, llm_choice: str = PARAM_GOOGLE_LLM):
     client = chromadb.HttpClient(host=CHROMADB_HOST, port=CHROMADB_PORT)
 
     # STEP-5: RETRIEVE SPECIFIC CASE THAT IS ASKED IN QUERY.
-    primary_car = query_metadata["car_num"]
+    primary_car = query_metadata.get("car_num", None)
 
     #  5.1 Convert extracted metadata into a ChromaDB 'where' filter
     decision_filter = {"$and": []}

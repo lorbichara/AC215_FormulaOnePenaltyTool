@@ -1,0 +1,5 @@
+encryptionsalt: v1:fZb21CObMSA=:v1:nZMJ1LWW/OR5zwaR:FNMxjHfyBrA+4tt6M5eNj/rUgybjkw==
+config:
+  gcp:project: ac215-f1penaltytool
+  security:ssh_user: sa_118423036934253368617
+  security:gcp_service_account_email: deployment@ac215-f1penaltytool.iam.gserviceaccount.com
