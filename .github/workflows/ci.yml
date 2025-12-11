@@ -67,7 +67,7 @@ jobs:
         run: |
           docker exec rag /bin/bash -c '
             KEY_PATH="/tmp/gcloud-key.json"
-            
+
             if [ -f "$KEY_PATH" ]; then
               export GOOGLE_APPLICATION_CREDENTIALS="$KEY_PATH"
             elif [ -f /app/secrets/f1penaltytool.json ]; then
@@ -75,7 +75,7 @@ jobs:
             else
               echo WARNING: Failed to locate credentials file for tests.
             fi
-            
+
             /.venv/bin/pytest tests/unit/ --cov=src/rag
           '
 

@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 #project_src_path = os.path.join(current_dir, '..', '..', 'src')
 #sys.path.insert(0, project_src_path)
 
-from rag.main import app
+from api.main import app
 
 client = TestClient(app)
 

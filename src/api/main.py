@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.middleware.cors import CORSMiddleware
 from enum import Enum
 
-import rag
+from rag import rag
 
 class LLMModel(str, Enum):
     gemini_default = "gemini-default"

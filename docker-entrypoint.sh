@@ -71,4 +71,4 @@ fi
 
 # Keep a shell open
 #exec /bin/bash
-python src/rag/main.py
+python src/api/main.py
