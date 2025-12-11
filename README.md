@@ -79,14 +79,14 @@ For this milestone, we applied feedback received in Milestone 2 including:
 [Frontend README](src/frontend/frontend-template/README.md)
 
 ### API
-[API README](src/rag/API_README.md)
+[API README](src/api/README.md)
 
 #### Model Fine-Tuning
 [Fine-Tuning README](src/finetune/README.md)
 
 
 ### CI and Testing
-[Testing README](src/tests/README.md)
+[Testing README](tests/README.md)
 
 
 ## Milestone 5

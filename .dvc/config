@@ -1,4 +1,4 @@
 [core]
     remote = input
 ['remote "input"']
-    url = gs://f1penaltydocs/dvc_store
+    url = gs://f1penaltytooldocs/dvc_store
