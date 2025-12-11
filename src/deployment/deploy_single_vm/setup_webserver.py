@@ -1,5 +1,5 @@
 import hashlib
-import pulumi
+# import pulumi
 from pulumi import ResourceOptions
 from pulumi_command import remote
 import pulumi_docker as docker

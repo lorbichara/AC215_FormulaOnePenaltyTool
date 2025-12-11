@@ -8,12 +8,15 @@ services:
         volumes:
             - .:/app
             - ../secrets:/app/secrets
+            - ../Output:/app/output
         devices:
             - "/dev/fuse:/dev/fuse"
         environment:
+            PYTHONPATH: /app/src:/usr/src/app
             ROOT_DIR: "/app"
             DATASET_DIR: "/app/input"
             OUTPUT_DIR: "/app/output"
+            CSV_ROOT: "/app/csv"
             GITHUB_ACTIONS: ${GITHUB_ACTIONS}
             GCP_SERVICE_ACCOUNT_JSON: ${GCP_SERVICE_ACCOUNT_JSON:-}
             GCP_PROJECT: "f1penaltytool"

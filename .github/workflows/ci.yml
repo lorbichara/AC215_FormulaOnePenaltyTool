@@ -57,11 +57,27 @@ jobs:
 
       - name: Run integration tests
         run: |
-          docker exec rag /.venv/bin/pytest src/tests/integration/ -v --tb=short
+          docker exec rag /.venv/bin/pytest tests/integration/ -v --tb=short
 
       - name: Run system tests
         run: |
-          docker exec rag /.venv/bin/pytest src/tests/system/ -v --tb=short
+          docker exec rag /.venv/bin/pytest tests/system/ -v --tb=short
+
+      - name: Run unit tests
+        run: |
+          docker exec rag /bin/bash -c '
+            KEY_PATH="/tmp/gcloud-key.json"
+            
+            if [ -f "$KEY_PATH" ]; then
+              export GOOGLE_APPLICATION_CREDENTIALS="$KEY_PATH"
+            elif [ -f /app/secrets/f1penaltytool.json ]; then
+              export GOOGLE_APPLICATION_CREDENTIALS=/app/secrets/f1penaltytool.json
+            else
+              echo WARNING: Failed to locate credentials file for tests.
+            fi
+            
+            /.venv/bin/pytest tests/unit/ --cov=src/rag
+          '
 
       - name: Stop container
         if: always()

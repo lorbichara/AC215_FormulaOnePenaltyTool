@@ -4,12 +4,19 @@ Tests the full API endpoints with FastAPI TestClient
 Based on L18, Slide 11-12 - Integration tests
 """
 
+import sys
+import os
+
 import pytest
 from fastapi.testclient import TestClient
+
+#current_dir = os.path.dirname(os.path.abspath(__file__))
+#project_src_path = os.path.join(current_dir, '..', '..', 'src')
+#sys.path.insert(0, project_src_path)
+
 from rag.main import app
 
 client = TestClient(app)
-
 
 class TestAPIEndpoints:
     """Integration tests for API endpoints"""

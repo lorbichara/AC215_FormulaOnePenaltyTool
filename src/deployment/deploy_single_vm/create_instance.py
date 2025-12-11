@@ -22,13 +22,13 @@ def create_instance():
         tuple: (instance, instance_ip, connection, persistent_disk, network)
     """
     # Get project info and configuration
-    gcp_config = pulumi.Config("gcp")
-    project = gcp_config.require("project")
+    # gcp_config = pulumi.Config("gcp")
+    # project = gcp_config.require("project")
     ssh_user = pulumi.Config("security").require("ssh_user")
     gcp_service_account_email = pulumi.Config("security").require(
         "gcp_service_account_email"
     )
-    location = os.environ["GCP_REGION"]
+    # location = os.environ["GCP_REGION"]
     zone = os.environ["GCP_ZONE"]
 
     # Configuration variables

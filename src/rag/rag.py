@@ -100,11 +100,13 @@ CHUNK_CORRUPTED_LIST_FILE = "chunk_corrupted.csv"
 EMBED_DECISION_STORE_LIST_FILE = "embed_deci_stored.csv"
 EMBED_REGULATION_STORE_LIST_FILE = "embed_regul_stored.csv"
 
-chunk_skipped_file = os.path.join("./", CHUNK_SKIPPED_LIST_FILE)
-chunk_processed_file = os.path.join("./", CHUNK_PROCESSED_LIST_FILE)
-chunk_corrupted_file = os.path.join("./", CHUNK_CORRUPTED_LIST_FILE)
-embed_deci_store_list_file = os.path.join("./", EMBED_DECISION_STORE_LIST_FILE)
-embed_regul_store_list_file = os.path.join("./", EMBED_REGULATION_STORE_LIST_FILE)
+CSV_ROOT = os.environ["CSV_ROOT"]
+
+chunk_skipped_file = os.path.join(CSV_ROOT, CHUNK_SKIPPED_LIST_FILE)
+chunk_processed_file = os.path.join(CSV_ROOT, CHUNK_PROCESSED_LIST_FILE)
+chunk_corrupted_file = os.path.join(CSV_ROOT, CHUNK_CORRUPTED_LIST_FILE)
+embed_deci_store_list_file = os.path.join(CSV_ROOT, EMBED_DECISION_STORE_LIST_FILE)
+embed_regul_store_list_file = os.path.join(CSV_ROOT, EMBED_REGULATION_STORE_LIST_FILE)
 
 chunk_processed_set = set()
 chunk_processed_set_orig = set()
@@ -179,30 +181,23 @@ def get_country_adjectives_map():
 
 
 def create_country_params():
-    global locations_list
-    global country_adjectives_map
 
     # Create a list of known country names from country_converter package.
     country_conv = country_converter.CountryConverter()
 
-    locations_list = set(country_conv.data["name_short"].str.lower())
-    locations_list.add("United Kingdom")
-    locations_list.add("Abu Dhabi")
-    locations_list.add("Saudi Arabia")
-    locations_list = set(map(str.lower, locations_list))
+    loc_list = set(country_conv.data["name_short"].str.lower())
+    loc_list.add("United Kingdom")
+    loc_list.add("Abu Dhabi")
+    loc_list.add("Saudi Arabia")
+    loc_list = set(map(str.lower, loc_list))
 
-    # Generate a dictionary of adjectives and their corresponding
-    # country names from the pycountry data.
-    country_adjectives_map = get_country_adjectives_map()
-
-    # NOTE: The following adjectives are missing in the pycountry data.
-    country_adjectives_map["turkish"] = "Türkiye".lower()
-    country_adjectives_map["british"] = "United Kingdom".lower()
-    country_adjectives_map["styrian"] = "Austria".lower()
+    return loc_list
 
 
 def extract_countries_using_demonyms(text):
     extracted_locations = set()
+
+    init_globals()
 
     try:
         # doc = nlp(text)
@@ -256,6 +251,7 @@ def extract_countries_using_demonyms(text):
 
 # Rule-Based Matching with spaCy's Matcher
 def extract_domain_entities(text):
+    init_globals()
 
     extracted_entities = set()
 
@@ -419,27 +415,39 @@ def parse_metadata_from_text(text) -> dict:
 
 def init_globals():
     global nlp
-    if nlp is not None:  # Already initialized.
-        return
+    global locations_list
+    global country_adjectives_map
 
-    # Load spacy's pre-trained English language processing pipeline.
-    try:
-        nlp = spacy.load("en_core_web_sm")
-        DEBUG(DBG_LVL_HIGH, "Spacy model loaded successfully.")
-    except OSError:
-        DEBUG(DBG_LVL_HIGH, "Spacy model not found. Downloading...")
+    if nlp is None:
+        # Load spacy's pre-trained English language processing pipeline.
         try:
-            download("en_core_web_sm")
             nlp = spacy.load("en_core_web_sm")
-            DEBUG(DBG_LVL_HIGH, "Model downloaded and loaded.")
+            DEBUG(DBG_LVL_HIGH, "Spacy model loaded successfully.")
+        except OSError:
+            DEBUG(DBG_LVL_HIGH, "Spacy model not found. Downloading...")
+            try:
+                download("en_core_web_sm")
+                nlp = spacy.load("en_core_web_sm")
+                DEBUG(DBG_LVL_HIGH, "Model downloaded and loaded.")
+            except Exception as e:
+                DEBUG(DBG_LVL_HIGH, f"Spacy loading failed: {e}")
+                raise
         except Exception as e:
             DEBUG(DBG_LVL_HIGH, f"Spacy loading failed: {e}")
             raise
-    except Exception as e:
-        DEBUG(DBG_LVL_HIGH, f"Spacy loading failed: {e}")
-        raise
 
-    create_country_params()
+    if locations_list is None:
+        locations_list = create_country_params()
+
+    if country_adjectives_map is None:
+        # Generate a dictionary of adjectives and their corresponding
+        # country names from the pycountry data.
+        country_adjectives_map = get_country_adjectives_map()
+
+        # NOTE: The following adjectives are missing in the pycountry data.
+        country_adjectives_map["turkish"] = "Türkiye".lower()
+        country_adjectives_map["british"] = "United Kingdom".lower()
+        country_adjectives_map["styrian"] = "Austria".lower()
 
 
 # =============================================================================
@@ -489,34 +497,12 @@ def find_markers(input_text):
 
 
 def chunk_file(filepath, filename, json_folder, counter, metadata):
-
     DEBUG(DBG_LVL_MED, "\nCOUNT: %d, FILE: %s" % (counter, filepath))
     # DEBUG(DBG_LVL_LOW, "filename: %s" % (filename))
 
     chunk_jsonl = os.path.join(json_folder, f"chunks-{filename}.jsonl")
-    chunk_exists = os.path.isfile(chunk_jsonl)
-    # print("Chunk file: %s, Exist? %d" %(chunk_jsonl, chunk_exists))
-
-    embed_jsonl = os.path.join(json_folder, f"embeddings-{filename}.jsonl")
-    embed_exists = os.path.isfile(embed_jsonl)
-    # print("Embed file: %s, Exist? %d" %(embed_jsonl, chunk_exists))
-
-    # Chunk_file  Embed_file  Comments
-    #   Not exist  Exist       Invalid scenario
-    #   Exists     Not exist   There is no guarantee that chunk file is valid.
-    #   Exists     Exists      Chunk file must have been valid
-
-    DEBUG(
-        DBG_LVL_LOW,
-        "FILE: %s, Chunked? %d Embedded? %d" % (filepath, chunk_exists, embed_exists),
-    )
-    if chunk_exists and embed_exists:  # File was already chunked and embedded
+    if os.path.isfile(chunk_jsonl):
         return ERROR_CODE_ALREADY_CHUNKED
-    else:
-        if chunk_exists:
-            # DEBUG(DBG_LVL_LOW, "Deleting: %s" % (chunk_jsonl))
-            # delete_file(chunk_jsonl)
-            return ERROR_CODE_SUCCESS
 
     input_text = ""
     try:
@@ -569,7 +555,6 @@ def chunk_file(filepath, filename, json_folder, counter, metadata):
     # Perform the chunking process.
     text_chunks = text_splitter.create_documents([input_text.lower()])
     text_chunks = [doc.page_content for doc in text_chunks]
-    # DEBUG(DBG_LVL_LOW, "Number of chunks: %s" %len(text_chunks))
     assert len(text_chunks)
 
     # Save the chunks
@@ -581,7 +566,6 @@ def chunk_file(filepath, filename, json_folder, counter, metadata):
     with open(chunk_jsonl, "w") as f:
         for i, chunk in enumerate(text_chunks):
             record = {"id": f"{filename}_{i}", "text": chunk, **metadata}
-            # DEBUG(DBG_LVL_LOW, "Writing chunk ..." + str(json.dumps(record)))
             f.write(json.dumps(record) + "\n")
 
     return ERROR_CODE_SUCCESS
@@ -596,8 +580,10 @@ def get_delta_files_to_process(chunk_file_list, json_folder):
         # print("CHUNK PROCESSED file: %s DOES NOT exist" %(chunk_processed_file))
 
         if len(chunk_jsonl_files):
+            # This is the case where some files are already processed before
+            # CSV tracking is introduced.
+
             # print("%d no of already processed files" %(len(chunk_jsonl_files)))
-            # This is the case where some files are already processed before CSV tracking is introduced.
             chunk_processed_set.update(chunk_jsonl_files)
             chunk_processed_set_orig.update(chunk_jsonl_files)
 
@@ -680,16 +666,18 @@ def chunk(tag, json_folder, limit):
         DEBUG(DBG_LVL_MED, ret_str)
         return ret_str, ERROR_CODE_GCS_FAILURE
 
+    DEBUG(DBG_LVL_HIGH, "Total files in blob: " + str(len(chunk_file_list)))
+
     total_files = 0
     total_failed = 0
     total_skipped = 0
     files_chunked_now = 0
     total_already_chunked = 0
 
-    # limit = 10
     delta_files = get_delta_files_to_process(chunk_file_list, json_folder)
-    DEBUG(DBG_LVL_MED, "Total files to process: " + str(len(delta_files)))
+    DEBUG(DBG_LVL_HIGH, "Total delta files to process: " + str(len(delta_files)))
 
+    # limit = 10
     for file in delta_files:
         if total_files > limit:
             break
@@ -716,6 +704,7 @@ def chunk(tag, json_folder, limit):
             chunk_skipped_set.update([f"chunks-{filename}.jsonl"])
             total_failed += 1
         elif ERROR_CODE_ALREADY_CHUNKED == retval:
+            DEBUG(DBG_LVL_MED, f"->ALREADY CHUNKED: {filepath}")
             chunk_processed_set.update([f"chunks-{filename}.jsonl"])
             total_already_chunked += 1
         else:
@@ -740,9 +729,9 @@ def chunk(tag, json_folder, limit):
 
     ret_str = "No of files processed now: " + str(files_chunked_now) + "\n"
     ret_str += "No of files already chunked: " + str(total_already_chunked) + "\n"
-    ret_str += "No of files skipped: " + str(total_skipped) + "\n"
+    ret_str += "No of files skipped: " + str(len(chunk_skipped_set)) + "\n"
     ret_str += "No of files corrupted/not accessible: " + str(total_failed) + "\n"
-    ret_str += "Total no of files in the corpus: " + str(total_files)
+    ret_str += "Total no of files in the corpus: " + str(len(chunk_processed_set))
 
     return ret_str, ERROR_CODE_SUCCESS
 
@@ -1077,7 +1066,7 @@ def download_file(url, download_loc):
         print(f"An error occurred during download: {e}")
 
 
-def extract_url_and_filename(input_text):
+def extract_url_and_filename(input_text, shall_download=True):
     url = None
     filename = None
     download_loc = None
@@ -1096,21 +1085,18 @@ def extract_url_and_filename(input_text):
         text = input_text.replace(url, "").strip()
 
         # Find the base name of the PDF file.
-        filename = os.path.basename(url)
-        filename = os.path.splitext(filename)[0].lower()
+        filename_full = os.path.basename(url).lower()
+        filename = os.path.splitext(filename_full)[0]
 
-        download_loc = "/tmp/" + filename
-        if os.path.exists(download_loc):
-            DEBUG(DBG_LVL_LOW, f"{download_loc} already exists")
-        else:
-            download_file(url, download_loc)
+        download_loc = "/tmp/" + filename_full
+        if shall_download:
+            if os.path.exists(download_loc):
+                DEBUG(DBG_LVL_LOW, f"{download_loc} already exists")
+            else:
+                download_file(url, download_loc)
 
-    print("\n--------")
-    print("CHECK ME")
-    print("--------")
-    print("url: " + str(url))
-    print("download_loc: " + str(download_loc))
-    print("\n")
+    DEBUG(DBG_LVL_LOW, "url: " + str(url))
+    DEBUG(DBG_LVL_LOW, "download_loc: " + str(download_loc))
 
     return text, filename, download_loc
 

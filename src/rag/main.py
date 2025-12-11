@@ -6,13 +6,12 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.middleware.cors import CORSMiddleware
 from enum import Enum
 
+import rag
 
 class LLMModel(str, Enum):
     gemini_default = "gemini-default"
     gemini_finetuned = "gemini-finetuned"
 
-
-import rag
 
 UVICORN_PORT = os.environ.get("UVICORN_PORT", "9000")
 

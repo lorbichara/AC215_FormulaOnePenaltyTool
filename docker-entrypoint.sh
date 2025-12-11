@@ -30,8 +30,10 @@ fi
 gcsfuse --implicit-dirs --key-file=$GOOGLE_APPLICATION_CREDENTIALS $GCP_BUCKET /mnt/gcs_data
 echo 'GCP bucket mounted at /mnt/gcs_data'
 
-mkdir -p /app/output
-mount --bind /mnt/gcs_data/output   /app/output
+mkdir -p /app/csv
+
+#mkdir -p /app/output
+#mount --bind /mnt/gcs_data/output   /app/output
 
 mkdir -p /app/input
 mount --bind /mnt/gcs_data/input    /app/input
