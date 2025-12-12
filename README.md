@@ -1,5 +1,7 @@
 # ac215_FormulaOnePenaltyTool
 
+![Logo](assets/logo.jpeg)
+
 ## Team Members
 * Beatrice Chen
 * Bhargav Kosaraju
@@ -8,7 +10,6 @@
 ## Group Name
 Formula One Penalty Tool
 
-
 ## Project Organization
 
 ```
@@ -16,44 +17,51 @@ Formula One Penalty Tool
 ├── reports
 │   └── Milestone1.pdf
 │   └── Milestone3.pdf
+│   └── Milestone4-ApplicationDesignDocument.pdf
 └── src
-    ├── datapipeline
-    │   ├── README.md
-    │   ├── Dockerfile
-    │   ├── pyproject.toml
-    │   ├── uv.lock
-    │   ├── requirements.txt
-    │   ├── __init__.py
-    │   ├── main.py
-    │   ├── scraper.py
-    │   ├── converter.py
-    │   ├── assets
-    └── rag
-        ├── README.md
-        ├── Dockerfile
-        ├── pyproject.toml
-        ├── uv.lock
-        ├── docker-shell.sh
-        ├── docker-entrypoint.sh
-        ├── docker-compose.yml
-        └── ac215_rag.py
-        └── assets
-    └── api
-        ├── README.md
-        ├── main.py
+│   ├── datapipeline
+│   ├── deployment
+│   ├── finetune
+│   ├── frontend
+│   ├── rag
+│   └── api
 └── tests
-    └── integration
-        ├── test_api.py
-    └── system
-        ├── test_system_api.py
-    └── unit
-        ├── test_unit.py
+│   └── integration
+│   └── system
+│   └── unit
+├── Dockerfile
+├── docker-compose.yml
+├── docker-entrypoint.sh
+├── docker-shell.sh
+├── pyproject.toml
+├── pytest.ini
+├── input.dvc
+├── .dvcignore
+├── .gitignore
+└── uv.lock
 ```
-
 ---
 
 ## Project
 This project aims to make Formula 1 penalties more transparent and understandable for fans. Governed by the FIA, F1 penalties often appear inconsistent due to the complexity of the Sporting and Technical Regulations. This application takes a given race penalty and provides an accessible explanation of the infringement, referencing the official FIA regulations. It also analyzes the fairness of the penalty by comparing it to historical cases, helping users better grasp how penalties are determined and whether they align with past precedents.
+
+![Home](assets/home.png)
+![Chat](assets/chat.png)
+
+## How to run locally
+
+### Pre-Requisites
+1. Have a GCP project. Code is set up to use f1penaltytool as a project name. If using a different one, GCP_PROJECT needs to be updated in docker-compose.yml.
+2. Have a storage bucket with decision and regulation PDF documents. To get these, see [Data Pipeline README](src/datapipeline/README.md) for information on how to scrape the documents. 
+3. Have a service account and access to a key and corresponding secrets (these should be stored in /app/secrets/f1penaltytool.json)
+
+---
+1. Clone the project
+2. On main directory, run `docker compose up`
+3. Access http://localhost:9000/docs to see the API.
+4. If you're a first time user, you'll have to run the `/chunk`, `/embed`, and `/store` APIs to create the chunkings and embeddings and save them in ChromaDB.
+5. If you're a returning user, you'll have to run `/store` the first time you bring up a new container.
+6. Access http://localhost:3001 to test the project using the frontend.
 
 ## Milestone 1
 See Milestone 1 [here](reports/Milestone1.pdf).
@@ -91,13 +99,11 @@ For this milestone, we applied feedback received in Milestone 2 including:
 ### API
 [API README](src/api/README.md)
 
-#### Model Fine-Tuning
+### Model Fine-Tuning
 [Fine-Tuning README](src/finetune/README.md)
-
 
 ### CI and Testing
 [Testing README](tests/README.md)
-
 
 ## Milestone 5
 ### Deployment
