@@ -39,8 +39,8 @@ export default function AnalyzePage() {
                         Race Control Decision Desk
                     </h1>
                     <p className="text-muted-foreground max-w-3xl mx-auto">
-                        Drop in a link to an official FIA PDF decision or paste the incident summary to generate a steward-style dashboard
-                        with fairness, regulations cited, and similar precedents.
+                        Enter a detailed description of a racing incident to generate a steward-style dashboard
+                        with fairness assessment, regulations cited, and similar precedents.
                     </p>
                 </div>
 

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { UploadCloud, Sparkles } from 'lucide-react';
 
-const samplePrompt = 'https://www.fia.com/sites/default/files/decision-document/2021%20Abu%20Dhabi%20Grand%20Prix%20-%20Decision%20-%20Mercedes%20Protest%20Art.%2048.12.pdf';
+const samplePrompt = "2021 Sao Paulo Grand Prix. Lap 48, Turn 4. Car 33 (Verstappen) attempts to overtake Car 44 (Hamilton) on the inside. Car 33 brakes late, missing the apex and forcing Car 44 wide off the track. Both cars leave the track limits. Car 33 retains the lead. No contact was made, but Car 44 was forced to take evasive action.";
 
 export default function IncidentInput({ onAnalyze, isAnalyzing }) {
     const [text, setText] = useState('');
@@ -28,10 +28,10 @@ export default function IncidentInput({ onAnalyze, isAnalyzing }) {
                         Steward Console
                     </p>
                     <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground">
-                        Submit the FIA decision link or incident summary
+                        Describe the Racing Incident
                     </h2>
                     <p className="text-muted-foreground mt-2 max-w-3xl">
-                        Paste a URL to an official FIA PDF decision (preferred) or provide incident notes. We’ll extract context, cross-check regulations, and return a steward-style dashboard.
+                        Provide a detailed summary of the incident. Include driver names, specific actions, and track context. We'll analyze it against regulations and historical precedents to generate a steward's report.
                     </p>
                 </div>
 
@@ -39,7 +39,7 @@ export default function IncidentInput({ onAnalyze, isAnalyzing }) {
                     <Textarea
                         value={text}
                         onChange={(e) => setText(e.target.value)}
-                        placeholder="Example: https://www.fia.com/sites/default/files/decision-document/2021%20Abu%20Dhabi%20Grand%20Prix%20-%20Decision%20-%20Mercedes%20Protest%20Art.%2048.12.pdf"
+                        placeholder="Example: 2021 Sao Paulo Grand Prix. Lap 48, Turn 4. Car 33 (Verstappen) attempts to overtake Car 44 (Hamilton) on the inside..."
                         className="min-h-[140px] bg-black/30 border-slate-800 focus-visible:ring-primary text-base"
                         disabled={isAnalyzing}
                     />

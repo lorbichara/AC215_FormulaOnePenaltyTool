@@ -21,9 +21,9 @@ const apiClient = axios.create({
     baseURL: BASE_API_URL,
 });
 
-async function getRealAssistantResponse(prompt) {
+async function getRealAssistantResponse(prompt, model = 'gemini-default') {
     try {
-        const response = await apiClient.get('/query/', { params: { prompt } });
+        const response = await apiClient.get('/query/', { params: { prompt, llm_choice: model } });
         return {
             message_id: uuid(),
             role: 'assistant',
@@ -42,7 +42,7 @@ async function getRealAssistantResponse(prompt) {
     }
 }
 
-const mockStartF1Chat = async (message) => {
+const mockStartF1Chat = async (message, model = 'gemini-default') => {
     const newChat = {
         chat_id: String(mock_chats.length + 1),
         title: message.content.substring(0, 30) + '...',
@@ -52,7 +52,7 @@ const mockStartF1Chat = async (message) => {
     const assistantResponse = {
         message_id: String(newChat.messages.length + 1),
         role: 'assistant',
-        content: `This is a mock response to "${message.content}"`,
+        content: `This is a mock response to "${message.content}" using ${model}`,
         timestamp: new Date().toISOString(),
     };
     newChat.messages.push(assistantResponse);
@@ -60,14 +60,14 @@ const mockStartF1Chat = async (message) => {
     return newChat;
 };
 
-const realStartF1Chat = async (message) => {
+const realStartF1Chat = async (message, model = 'gemini-default') => {
     const userMessage = {
         ...message,
         message_id: uuid(),
         timestamp: new Date().toISOString(),
     };
 
-    const assistantResponse = await getRealAssistantResponse(message.content);
+    const assistantResponse = await getRealAssistantResponse(message.content, model);
 
     const newChat = {
         chat_id: uuid(),
@@ -79,7 +79,7 @@ const realStartF1Chat = async (message) => {
     return newChat;
 };
 
-const mockContinueF1Chat = async (chat_id, message) => {
+const mockContinueF1Chat = async (chat_id, message, model = 'gemini-default') => {
     const chat = mock_chats.find((c) => c.chat_id === chat_id);
     if (chat) {
         const newMessage = {
@@ -92,7 +92,7 @@ const mockContinueF1Chat = async (chat_id, message) => {
         const assistantResponse = {
             message_id: String(chat.messages.length + 1),
             role: 'assistant',
-            content: `This is a mock response to "${message.content}"`,
+            content: `This is a mock response to "${message.content}" using ${model}`,
             timestamp: new Date().toISOString(),
         };
         chat.messages.push(assistantResponse);
@@ -101,7 +101,7 @@ const mockContinueF1Chat = async (chat_id, message) => {
     return null;
 };
 
-const realContinueF1Chat = async (chat_id, message) => {
+const realContinueF1Chat = async (chat_id, message, model = 'gemini-default') => {
     const chat = chats.find((c) => c.chat_id === chat_id);
     if (chat) {
         const newMessage = {
@@ -111,7 +111,7 @@ const realContinueF1Chat = async (chat_id, message) => {
         };
         chat.messages.push(newMessage);
 
-        const assistantResponse = await getRealAssistantResponse(message.content);
+        const assistantResponse = await getRealAssistantResponse(message.content, model);
         chat.messages.push(assistantResponse);
 
         return chat;
@@ -193,22 +193,22 @@ const extractPrecedents = (text) => {
 export const analyzePenalty = async (incidentText) => {
     try {
         const prompt = incidentText?.trim() || 'Analyze this Formula 1 penalty incident.';
-        const response = await apiClient.get('/query/', { params: { prompt } });
-        const raw = response.data?.response || '';
+        const response = await axios.post('/api/analyze', { incidentDescription: prompt });
+        const data = response.data || {};
 
-        const penaltySeverity = classifySeverity(raw);
-        const fairnessRating = scoreFromText(raw);
+        const penaltySeverity = data.penalty_severity || classifySeverity(data.technical_verdict || data.fan_summary || '');
+        const fairnessRating = data.fairness_rating ?? scoreFromText(data.technical_verdict || data.fan_summary || '');
 
         return {
-            title: prompt.slice(0, 80),
-            fan_summary: raw || 'Awaiting analysis response.',
-            technical_verdict: raw || 'No technical verdict returned.',
+            title: data.title || prompt.slice(0, 80),
+            fan_summary: data.fan_summary || 'Awaiting analysis response.',
+            technical_verdict: data.technical_verdict || 'No technical verdict returned.',
             penalty_severity: penaltySeverity,
             fairness_rating: fairnessRating,
-            regulations_breached: extractRegulations(raw),
-            historical_precedents: extractPrecedents(raw),
-            key_factors: ['Race conditions', 'Car positioning', 'Previous rulings'].slice(0, 3),
-            raw_response: raw,
+            regulations_breached: data.regulations_breached || extractRegulations(data.technical_verdict || ''),
+            historical_precedents: data.historical_precedents || extractPrecedents(data.fan_summary || ''),
+            key_factors: data.key_factors || ['Race conditions', 'Car positioning', 'Previous rulings'].slice(0, 3),
+            raw_response: data,
         };
     } catch (error) {
         console.error('Error analyzing penalty', error);

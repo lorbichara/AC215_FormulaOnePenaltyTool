@@ -19,7 +19,7 @@ function RaceLights({ active }) {
         const interval = setInterval(() => {
             step = step >= 6 ? 1 : step + 1;
             setPhase(step);
-        }, 400);
+        }, 600);
         return () => clearInterval(interval);
     }, [active]);
 
@@ -40,7 +40,7 @@ function RaceLights({ active }) {
                     />
                 );
             })}
-            <span className="text-xs uppercase tracking-wide text-muted-foreground">
+            <span className="text-xs uppercase tracking-wide text-slate-700 dark:text-slate-200">
                 {phase === 6 ? 'Lights out!' : 'On the grid'}
             </span>
         </div>
@@ -49,47 +49,51 @@ function RaceLights({ active }) {
 
 export default function ChatMessage({ chat, isTyping }) {
     return (
-        <div className="flex-grow p-6 overflow-y-auto space-y-6">
-            {chat?.messages.map((message) => (
-                <div
-                    key={message.message_id}
-                    className={`flex items-start gap-4 ${
-                        message.role === 'user' ? 'justify-end' : ''
-                    }`}
-                >
-                    {message.role === 'assistant' && (
-                        <Avatar>
-                            <AvatarFallback><Bot /></AvatarFallback>
-                        </Avatar>
-                    )}
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6">
+            <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
+                {chat?.messages.map((message) => (
                     <div
-                        className={`max-w-lg p-3 rounded-lg ${
-                            message.role === 'user'
-                                ? 'bg-primary text-primary-foreground'
-                                : 'bg-muted'
+                        key={message.message_id}
+                        className={`flex items-start gap-4 ${
+                            message.role === 'user' ? 'justify-end' : ''
                         }`}
                     >
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {message.content}
-                        </ReactMarkdown>
+                        {message.role === 'assistant' && (
+                            <Avatar>
+                                <AvatarImage src="/assets/logo.jpeg" alt="F1 Steward" />
+                                <AvatarFallback><Bot /></AvatarFallback>
+                            </Avatar>
+                        )}
+                        <div
+                            className={`max-w-2xl rounded-2xl border p-4 text-[15px] leading-relaxed shadow-lg transition-all ${
+                                message.role === 'user'
+                                    ? 'border-red-500/60 bg-red-600 text-white shadow-red-500/30 dark:border-red-500/50 dark:bg-red-600 dark:text-white'
+                                    : 'border-slate-200 bg-slate-50 text-slate-900 shadow-black/5 dark:border-white/10 dark:bg-[#11131a] dark:text-slate-50 dark:shadow-black/20'
+                            }`}
+                        >
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {message.content}
+                            </ReactMarkdown>
+                        </div>
+                        {message.role === 'user' && (
+                            <Avatar>
+                                <AvatarFallback><User /></AvatarFallback>
+                            </Avatar>
+                        )}
                     </div>
-                    {message.role === 'user' && (
+                ))}
+                {isTyping && (
+                    <div className="flex items-start gap-4">
                         <Avatar>
-                            <AvatarFallback><User /></AvatarFallback>
+                            <AvatarImage src="/assets/logo.jpeg" alt="F1 Steward" />
+                            <AvatarFallback><Bot /></AvatarFallback>
                         </Avatar>
-                    )}
-                </div>
-            ))}
-            {isTyping && (
-                <div className="flex items-start gap-4">
-                    <Avatar>
-                        <AvatarFallback><Bot /></AvatarFallback>
-                    </Avatar>
-                    <div className="max-w-lg p-3 rounded-lg bg-muted">
-                        <RaceLights active />
+                        <div className="max-w-2xl rounded-2xl border border-white/10 bg-white/10 p-4 shadow-lg shadow-black/20 backdrop-blur">
+                            <RaceLights active />
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 }
