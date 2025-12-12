@@ -76,7 +76,7 @@ jobs:
               echo WARNING: Failed to locate credentials file for tests.
             fi
 
-            /.venv/bin/pytest tests/unit/ --cov=src/rag
+            /.venv/bin/pytest tests/unit/ --cov=src/rag  --capture=tee-sys
           '
 
       - name: Stop container

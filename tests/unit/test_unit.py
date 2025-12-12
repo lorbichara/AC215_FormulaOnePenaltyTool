@@ -92,16 +92,16 @@ class TestRag:
         ret_str, err_code = rag.create_chunks(10)
         assert err_code == rag.ERROR_CODE_SUCCESS
 
-    def test_find_embed_files(self):
-        filepath_list, file_name_list = rag.find_embed_files(rag.DECISION_JSON_DIR)
-        assert len(filepath_list)
-
     def test_embeddings(self):
         ret_str, err_code = rag.create_embeddings(10)
         assert err_code == rag.ERROR_CODE_SUCCESS
 
+    def test_find_embed_files(self):
+        filepath_list, file_name_list = rag.find_embed_files(rag.DECISION_JSON_DIR)
+        assert len(filepath_list)
+
     def test_store(self):
-        ret_str, err_code = rag.store_embeddings(True)
+        ret_str, err_code = rag.store_embeddings(False)
         assert err_code == rag.ERROR_CODE_SUCCESS
     
     def test_query(self):
