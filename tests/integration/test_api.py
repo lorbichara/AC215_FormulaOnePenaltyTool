@@ -45,12 +45,6 @@ class TestAPIEndpoints:
         response = client.post("/")
         assert response.status_code == 405
 
-    def test_method_health(self):
-        response = client.get("/health")
-        assert response.status_code == 200
-        assert response.headers["Content-Type"] == "text/html; charset=utf-8"
-        assert "healthy" in response.text
-
 
 class TestCORS:
     """Tests for CORS configuration"""

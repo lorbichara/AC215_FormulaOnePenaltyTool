@@ -33,43 +33,6 @@ app.add_middleware(
 async def get_index():
     return {"message": "Welcome to Formula One Penalty Analysis Tool"}
 
-
-@app.get("/health")
-async def health_check():
-    ret_str = "healthy"
-    html_content = f"""
-        {ret_str}
-    """
-    return HTMLResponse(content=html_content, status_code=200)
-
-
-@app.get("/chunk/")
-async def create_chunks(limit: int = sys.maxsize):
-    ret_str, ret_val = rag.create_chunks(limit)
-    html_content = f"""
-        {ret_str}
-    """
-    return HTMLResponse(content=html_content, status_code=200)
-
-
-@app.get("/embed/")
-async def create_embeddings(limit: int):
-    ret_str, ret_val = rag.create_embeddings(limit)
-    html_content = f"""
-        {ret_str}
-    """
-    return HTMLResponse(content=html_content, status_code=200)
-
-
-@app.get("/store/")
-async def store_embeddings(testing: bool):
-    ret_str, ret_val = rag.store_embeddings(testing)
-    html_content = f"""
-        {ret_str}
-    """
-    return HTMLResponse(content=html_content, status_code=200)
-
-
 @app.get("/query/")
 async def query_llm(prompt: str, llm_choice: LLMModel = LLMModel.gemini_default):
 

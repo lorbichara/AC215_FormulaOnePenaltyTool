@@ -32,42 +32,6 @@ class TestAPIEndpoints:
         assert "message" in data
         assert "Formula One Penalty" in data["message"]
 
-    def test_health_check(self):
-        """Test health check endpoint"""
-        response = requests.get(f"{API_BASE_URL}/health")
-        assert response.status_code == 200
-        assert response.headers["Content-Type"] == "text/html; charset=utf-8"
-        assert "healthy" in response.text
-
-    def test_chunk(self):
-        """Test chunking endpoint"""
-        response = requests.get(f"{API_BASE_URL}/chunk?limit=1")
-        assert response.status_code == 200
-        assert response.headers["Content-Type"] == "text/html; charset=utf-8"
-        assert "Chunking for decision files done" in response.text
-        assert "Chunking for regulation files done" in response.text
-
-    def test_embed(self):
-        """Test generate embeddings endpoint"""
-        response = requests.get(f"{API_BASE_URL}/embed?limit=1")
-        assert response.status_code == 200
-        assert response.headers["Content-Type"] == "text/html; charset=utf-8"
-        assert "Embedding for decision files done" in response.text
-        assert "Embedding for regulation files done" in response.text
-
-    def test_store(self):
-        """Test generate embeddings endpoint"""
-        response = requests.get(f"{API_BASE_URL}/store?testing=True")
-        assert response.status_code == 200
-        assert response.headers["Content-Type"] == "text/html; charset=utf-8"
-        assert (
-            "Storing of embeddings of decision files in Chromadb done" in response.text
-        )
-        assert (
-            "Storing of embeddings of regulation files in Chromadb done"
-            in response.text
-        )
-
     def test_query(self):
         """Test llm query endpoint"""
         response = requests.get(
