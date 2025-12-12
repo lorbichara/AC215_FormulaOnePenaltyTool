@@ -38,10 +38,6 @@ The tests will **skip** executuin if the API backend is unresponsive.
 | Test Method | Endpoint | Description | Assertions |
 | :--- | :--- | :--- | :--- |
 | `test_root_endpoint` | `/` (GET) | Verifies the main root endpoint is accessible. | **Status code 200**. Response is **JSON**. Contains a `"message"` key with the text `"Formula One Penalty"`. |
-| `test_health_check` | `/health` (GET) | Checks the dedicated health-check endpoint. | **Status code 200**. `Content-Type` is `text/html; charset=utf-8`. Response text contains `"healthy"`. |
-| `test_chunk` | `/chunk?limit=1` (GET) | Tests the endpoint responsible for **document chunking**. The `limit=1` query parameter is used for a quick test run. | **Status code 200**. `Content-Type` is `text/html; charset=utf-8`. Response confirms chunking is done for both **"decision files"** and **"regulation files"**. |
-| `test_embed` | `/embed?limit=1` (GET) | Tests the endpoint responsible for **generating embeddings**. The `limit=1` query parameter is used for a quick test run. | **Status code 200**. `Content-Type` is `text/html; charset=utf-8`. Response confirms embedding generation is done for both **"decision files"** and **"regulation files"**. |
-| `test_store` | `/store?testing=True` (GET) | Tests the endpoint for **storing embeddings** in the ChromaDB vector store. The `testing=True` query parameter is used for a quick test run. | **Status code 200**. `Content-Type` is `text/html; charset=utf-8`. Response confirms successful storage of embeddings for both **"decision files"** and **"regulation files"** in `chromadb`. |
 | `test_query` | `/query` (GET) | Tests the main **LLM query endpoint**, passing a specific prompt via a query parameter. | **Status code 200**. `Content-Type` is `text/html; charset=utf-8`. |
 
 ---
@@ -51,6 +47,57 @@ These tests can be run using the `pytest` command from the terminal:
 ```bash
 pytest src/tests/system -v --tb=short
 ```
+
+#### API Unit Tests
+This test suite contains a set of unit tests designed to verify the RAG implementation in rag.py file. These tests use pytest and make real HTTP calls to the API, ensuring end-to-end functionality.
+
+The unit test coverage has reached 67%.
+
+There are a total of 27 functions in rag.py file.
+
+**Functions that are directly execised from unit tests**  
+ - def delete_file()  
+ - def get_country_adjectives_map()  
+ - def create_country_params()  
+ - def extract_countries_using_demonyms()   
+ - def extract_domain_entities()  
+ - def extract_place_from_text()  
+ - def extract_car_num_from_txt()  
+ - def parse_metadata_from_text()  
+ - def is_file_interesting()  
+
+ - def create_chunks()  
+ - def create_embeddings()  
+ - def store_embeddings()  
+ - def download_file()
+ - def extract_url_and_filename()
+ - def query()  
+
+**Functions that are indirectly execised from unit tests**  
+ - def get_delta_files_to_process()  
+ - def find_markers()  
+ - def init_globals()  
+ - def chunk_file()  
+ - def chunk()  
+ - def find_embed_files()  
+ - def generate_embeddings()  
+ - def embed()  
+ - def store_text_embeddings()  
+ - def store()  
+
+**The functions that are not covered by unit tests as of now**
+def create_user_query():
+def preprocess_query():
+
+**Running the system tests**
+
+These tests can be run using the `pytest` command from the terminal:
+```bash
+pytest tests/unit/  --cov=src/rag/rag.py
+pytest tests/unit/  --cov=src/rag/rag.py --cov-report=html
+```
+<img src="reports/Unit_test_run.png">
+
 
 #### Example snapshot of CI/CD execution on Github repository
 <img src="reports/Gitrun.png">
