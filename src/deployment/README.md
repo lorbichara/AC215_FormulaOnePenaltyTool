@@ -4,7 +4,7 @@ This document summarizes the deployment infrastructure we built for the F1 Penal
 
 ## Deployment History
 
-The project was initially deployed successfully, but Google Cloud Platform suspended our entire project due to terms of service violations, which required us to rebuild everything from scratch. We recreated the GCP project, rebuilt the storage bucket infrastructure, and redeployed all services. Due to time constraints, we did not include the fine-tuned model in the rebuilt project, but we successfully restored the core application functionality with the default model and redeployed the entire stack.
+The project was initially deployed successfully, but Google Cloud Platform suspended our entire project due to terms of service violations, which required us to rebuild everything from scratch. We recreated the GCP project, rebuilt the storage bucket infrastructure used for RAG, and redeployed all services. Due to time constraints, we did not include the fine-tuned model (from MS4) in the rebuilt project, but we successfully restored the core application functionality with the default model (using RAG) and redeployed the entire stack.
 
 ![Cluster Overview](assets/cluster1.png)
 
@@ -13,6 +13,12 @@ The project was initially deployed successfully, but Google Cloud Platform suspe
 ![Cluster Resources](assets/cluster3.png)
 
 ![Pulumi Output](assets/pulumioutput.png)
+
+![Home](assets/homeprod.png)
+
+![Analyze](assets/analyzeprod.png)
+
+![Chat](assets/chatprod.png)
 
 ## Prerequisites: Docker Environment Setup
 
@@ -190,8 +196,8 @@ pulumi up
 ### Why Two Deployment Options?
 
 We implemented both Single VM and Kubernetes deployments to provide flexibility:
-- **Single VM** for simpler use cases, development, or cost-sensitive scenarios
-- **Kubernetes** for production workloads that need scalability and high availability
+- **Single VM** for simpler use cases, development, or cost-sensitive scenarios. This is what we started with to initially test our deployment pipeline.
+- **Kubernetes** for production workloads that need scalability and high availability. Used at the end for the final milestone deliverable.
 
 ### Image Building First
 
