@@ -104,7 +104,7 @@ For this milestone, we applied feedback received in Milestone 2 including:
 [Deployment README](src/deployment/README.md)
 
 ### Blog
-Coming Soon!
+[Blog](https://medium.com/institute-for-applied-computational-science/racing-toward-transparency-using-ai-to-explain-f1-penalties-b33122ed7f8d)
 
 ### Video
-Coming Soon!
+[Video](https://bit.ly/FormulaOnePenaltyToolVideo)
