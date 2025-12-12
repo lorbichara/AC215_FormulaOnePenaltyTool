@@ -1,6 +1,6 @@
 # ac215_FormulaOnePenaltyTool
 
-![Logo](assets/logo.jpeg)
+![Logo](reports/logo.jpeg)
 
 ## Team Members
 * Beatrice Chen
@@ -45,8 +45,9 @@ Formula One Penalty Tool
 ## Project
 This project aims to make Formula 1 penalties more transparent and understandable for fans. Governed by the FIA, F1 penalties often appear inconsistent due to the complexity of the Sporting and Technical Regulations. This application takes a given race penalty and provides an accessible explanation of the infringement, referencing the official FIA regulations. It also analyzes the fairness of the penalty by comparing it to historical cases, helping users better grasp how penalties are determined and whether they align with past precedents.
 
-![Home](assets/home.png)
-![Chat](assets/chat.png)
+![Home](reports/home.png)
+
+![Chat](reports/chat.png)
 
 ## How to run locally
 
