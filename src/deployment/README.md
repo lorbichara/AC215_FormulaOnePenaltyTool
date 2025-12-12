@@ -6,6 +6,12 @@ This document summarizes the deployment infrastructure we built for the F1 Penal
 
 The project was initially deployed successfully, but Google Cloud Platform suspended our entire project due to terms of service violations, which required us to rebuild everything from scratch. We recreated the GCP project, rebuilt the storage bucket infrastructure used for RAG, and redeployed all services. Due to time constraints, we did not include the fine-tuned model (from MS4) in the rebuilt project, but we successfully restored the core application functionality with the default model (using RAG) and redeployed the entire stack.
 
+Screenshot of our GCP project suspended:
+
+![Suspended Project](assets/suspendedproject.png)
+
+After re-building and re-deploying:
+
 ![Cluster Overview](assets/cluster1.png)
 
 ![Cluster Details](assets/cluster2.png)
