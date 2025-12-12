@@ -96,10 +96,10 @@ These tests can be run using the `pytest` command from the terminal:
 pytest tests/unit/  --cov=src/rag/rag.py
 pytest tests/unit/  --cov=src/rag/rag.py --cov-report=html
 ```
-<img src="reports/Unit_test_run.png">
+<img src="../reports/Unit_test_run.png">
 
 
 #### Example snapshot of CI/CD execution on Github repository
-<img src="reports/Gitrun.png">
+<img src="../reports/Gitrun.png">
 
 ---
